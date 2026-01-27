@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/lib/game/deck'
 import { validatePlay } from '@/lib/game/rules'
 import { Hand, OpponentHand } from '@/components/game/hand'
-import { PlayArea, ActionButtons } from '@/components/game/play-area'
+import { PlayArea, ActionButtons, BurnedCards } from '@/components/game/play-area'
 import { Scoreboard, RoundResults, GameOver } from '@/components/game/scoreboard'
 import { Chat } from '@/components/game/chat'
 import { TradingPhase } from '@/components/game/trading'
@@ -47,6 +47,7 @@ interface GameState {
   myHand: Card[]
   messages?: ChatMessage[]
   tradingState?: TradingState | null
+  burnedCards?: Card[]
 }
 
 export default function PlayPage({ params }: { params: Promise<{ code: string }> }) {
@@ -261,6 +262,10 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         </div>
       )}
 
+      {gameState.burnedCards && gameState.burnedCards.length > 0 && (
+        <BurnedCards cards={gameState.burnedCards} currentRound={gameState.currentRound} />
+      )}
+
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-green-500" />
@@ -342,23 +347,34 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         </div>
       </div>
 
-      <div className="mt-auto">
-        <div className="text-center mb-2">
-          <span className="text-white font-medium">{myPlayer?.name}</span>
+      <div className={`mt-auto transition-all duration-300 ${isMyTurn ? 'pb-2' : ''}`}>
+        <div className="text-center mb-3">
+          <span className={`font-medium transition-all duration-300 ${isMyTurn ? 'text-yellow-300 text-lg' : 'text-white'}`}>
+            {myPlayer?.name}
+          </span>
           {myPlayer?.isFinished && (
             <span className="ml-2 text-emerald-400">({myPlayer.currentRank})</span>
           )}
-          {isMyTurn && <span className="ml-2 text-yellow-400">Your turn!</span>}
+          {isMyTurn && (
+            <span className="ml-2 text-yellow-400 animate-pulse font-bold">
+              ★ Your turn! ★
+            </span>
+          )}
         </div>
 
         {!myPlayer?.isFinished && (
-          <>
+          <div className={`rounded-xl p-4 transition-all duration-300 ${
+            isMyTurn
+              ? 'bg-yellow-500/10 border-2 border-yellow-500/30 shadow-lg shadow-yellow-500/20'
+              : 'bg-slate-800/30'
+          }`}>
             <Hand
               cards={hand}
               selectable={isMyTurn && !actionLoading}
               onSelectionChange={setSelectedCards}
               disabled={!isMyTurn || actionLoading}
               twosHigh={gameState.settings.twosHigh}
+              isMyTurn={isMyTurn}
             />
 
             <ActionButtons
@@ -369,7 +385,7 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
               onPass={handlePass}
               isMyTurn={isMyTurn}
             />
-          </>
+          </div>
         )}
 
         {myPlayer?.isFinished && (

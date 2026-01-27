@@ -13,6 +13,7 @@ interface HandProps {
   disabled?: boolean
   twosHigh?: boolean
   freeSelect?: boolean // Allow selecting any cards without validation (for trading)
+  isMyTurn?: boolean // Highlight cards when it's your turn
 }
 
 // Check if cards could be building toward a bomb
@@ -51,6 +52,7 @@ export function Hand({
   disabled = false,
   twosHigh = false,
   freeSelect = false,
+  isMyTurn = false,
 }: HandProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -174,10 +176,15 @@ export function Hand({
     return false
   }
 
-  const overlap = Math.min(40, Math.max(20, 400 / cards.length))
+  // Adjust overlap based on card count and turn state
+  const baseOverlap = Math.min(40, Math.max(20, 400 / cards.length))
+  const overlap = isMyTurn ? baseOverlap * 0.9 : baseOverlap  // Slightly less overlap when it's your turn
 
   return (
-    <div className="flex justify-center">
+    <div className={cn(
+      "flex justify-center transition-all duration-300",
+      isMyTurn && "scale-105"  // Slightly larger hand when it's your turn
+    )}>
       <div
         className="flex"
         style={{
@@ -192,14 +199,14 @@ export function Hand({
               style={{
                 marginLeft: index === 0 ? 0 : `-${overlap}px`,
                 zIndex: selectedIds.has(card.id) ? 100 : index,
-                opacity: !isSelectable && !selectedIds.has(card.id) ? 0.5 : 1,
-                transition: 'opacity 0.15s ease',
+                transition: 'all 0.15s ease',
               }}
             >
               <PlayingCard
                 card={card}
                 selected={selectedIds.has(card.id)}
                 disabled={!isSelectable}
+                highlighted={isMyTurn}
                 onClick={() => toggleCard(card)}
               />
             </div>

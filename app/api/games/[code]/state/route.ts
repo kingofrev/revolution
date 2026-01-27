@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { createDeck, shuffleDeck, dealCards, sortHand, getHighestSuitInSet, getRunHighCard, getCardValue, getBombHighRank } from '@/lib/game/deck'
+import { createDeck, shuffleDeck, dealCards, dealCardsWithExtras, sortHand, getHighestSuitInSet, getRunHighCard, getCardValue, getBombHighRank } from '@/lib/game/deck'
 import { validatePlay, getPlayType, getBestCards, getWorstCards } from '@/lib/game/rules'
 
 // Helper to load game state from database
@@ -72,7 +72,8 @@ export async function GET(
     if (!currentState && game.status === 'PLAYING') {
       // Initialize game state with dealt cards
       const deck = shuffleDeck(createDeck())
-      const hands = dealCards(deck, game.players.length)
+      // Round 1: burn extra cards (no recipients)
+      const { hands, burnedCards } = dealCardsWithExtras(deck, game.players.length, [])
 
       const players = game.players.map((p, index) => ({
         id: p.id,
@@ -113,6 +114,7 @@ export async function GET(
         turnOrder,
         tradingState: null,
         messages: [],
+        burnedCards, // Show burned cards for round 1 (5 or 6 players)
       }
 
       // Save to database
@@ -250,10 +252,21 @@ export async function POST(
 
       // Deal new cards
       const deck = shuffleDeck(createDeck())
-      const hands = dealCards(deck, state.players.length)
 
       // Store previous finish order for trading
       const prevFinishOrder = [...state.finishOrder]
+      const playerCount = state.players.length
+
+      // For rounds after round 1, give extra cards to worst finishers
+      // Get player indices of worst finishers (last in finish order)
+      const extraCardsCount = 52 % playerCount
+      const worstFinisherIds = prevFinishOrder.slice(-extraCardsCount).reverse() // Last place first
+      const extraCardRecipients = worstFinisherIds.map((playerId: string) => {
+        const playerIndex = state.players.findIndex((p: any) => p.id === playerId)
+        return playerIndex
+      })
+
+      const { hands } = dealCardsWithExtras(deck, playerCount, extraCardRecipients)
 
       // Reset player states and deal new hands
       state.players.forEach((p: any, index: number) => {
@@ -261,6 +274,9 @@ export async function POST(
         p.isFinished = false
         p.finishPosition = null
       })
+
+      // Clear burned cards for subsequent rounds
+      state.burnedCards = []
 
       state.currentRound++
       state.lastPlay = null

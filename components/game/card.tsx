@@ -9,6 +9,7 @@ interface CardProps {
   disabled?: boolean
   faceDown?: boolean
   size?: 'sm' | 'md' | 'lg'
+  highlighted?: boolean  // Glow effect for your turn
   onClick?: () => void
 }
 
@@ -25,6 +26,7 @@ export function PlayingCard({
   disabled = false,
   faceDown = false,
   size = 'md',
+  highlighted = false,
   onClick,
 }: CardProps) {
   const sizeClasses = {
@@ -60,9 +62,10 @@ export function PlayingCard({
         'rounded-lg border-2 bg-white',
         'flex flex-col items-center justify-between p-1',
         'shadow-md transition-all duration-150',
-        selected && 'ring-2 ring-primary -translate-y-2 border-primary',
-        !disabled && !selected && 'hover:-translate-y-1 hover:shadow-lg',
-        disabled && 'opacity-50 cursor-not-allowed',
+        selected && 'ring-2 ring-yellow-400 -translate-y-3 border-yellow-400 shadow-yellow-400/50 shadow-lg',
+        !disabled && !selected && 'hover:-translate-y-1 hover:shadow-lg cursor-pointer',
+        disabled && 'cursor-default',  // No opacity change - cards stay visible
+        highlighted && !selected && 'shadow-emerald-400/30 shadow-lg',  // Subtle glow when it's your turn
         color === 'red' ? 'text-red-600' : 'text-slate-900'
       )}
     >

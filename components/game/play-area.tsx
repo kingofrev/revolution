@@ -130,3 +130,28 @@ export function ActionButtons({
     </div>
   )
 }
+
+interface BurnedCardsProps {
+  cards: Card[]
+  currentRound: number
+}
+
+export function BurnedCards({ cards, currentRound }: BurnedCardsProps) {
+  if (!cards || cards.length === 0 || currentRound > 1) {
+    return null
+  }
+
+  return (
+    <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-800/95 rounded-xl p-4 z-40 border border-amber-500/50">
+      <div className="text-amber-400 text-sm font-medium text-center mb-2">
+        Burned Cards (Round 1)
+      </div>
+      <div className="flex gap-2 justify-center">
+        <CardStack cards={cards} />
+      </div>
+      <div className="text-slate-400 text-xs text-center mt-2">
+        These cards are out of play this round
+      </div>
+    </div>
+  )
+}

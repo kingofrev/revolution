@@ -138,10 +138,52 @@ export function shuffleDeck(deck: Card[]): Card[] {
 
 export function dealCards(deck: Card[], playerCount: number): Card[][] {
   const hands: Card[][] = Array.from({ length: playerCount }, () => [])
-  deck.forEach((card, index) => {
-    hands[index % playerCount].push(card)
-  })
+  const cardsPerPlayer = Math.floor(52 / playerCount)
+  const cardsToUse = cardsPerPlayer * playerCount
+
+  for (let i = 0; i < cardsToUse; i++) {
+    hands[i % playerCount].push(deck[i])
+  }
   return hands
+}
+
+// Deal cards with extra cards going to specified players (by index)
+// extraCardRecipients: array of player indices who get extra cards (worst finishers)
+export function dealCardsWithExtras(
+  deck: Card[],
+  playerCount: number,
+  extraCardRecipients: number[]
+): { hands: Card[][], burnedCards: Card[] } {
+  const hands: Card[][] = Array.from({ length: playerCount }, () => [])
+  const cardsPerPlayer = Math.floor(52 / playerCount)
+  const extraCards = 52 % playerCount
+  const cardsToUse = cardsPerPlayer * playerCount
+
+  // Deal base cards evenly
+  for (let i = 0; i < cardsToUse; i++) {
+    hands[i % playerCount].push(deck[i])
+  }
+
+  // Handle extra cards
+  const burnedCards: Card[] = []
+  if (extraCards > 0) {
+    const leftoverCards = deck.slice(cardsToUse)
+
+    if (extraCardRecipients.length > 0) {
+      // Give extra cards to worst finishers
+      for (let i = 0; i < leftoverCards.length && i < extraCardRecipients.length; i++) {
+        const recipientIndex = extraCardRecipients[i]
+        if (recipientIndex >= 0 && recipientIndex < playerCount) {
+          hands[recipientIndex].push(leftoverCards[i])
+        }
+      }
+    } else {
+      // Round 1: burn the cards
+      burnedCards.push(...leftoverCards)
+    }
+  }
+
+  return { hands, burnedCards }
 }
 
 export function sortHand(hand: Card[], twosHigh: boolean): Card[] {
