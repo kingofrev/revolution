@@ -186,13 +186,16 @@ export function dealCardsWithExtras(
   return { hands, burnedCards }
 }
 
-export function sortHand(hand: Card[], twosHigh: boolean): Card[] {
+export function sortHand(hand: Card[], twosHigh: boolean, direction: 'asc' | 'desc' = 'asc'): Card[] {
   return [...hand].sort((a, b) => {
     const valueA = getCardValue(a.rank, twosHigh)
     const valueB = getCardValue(b.rank, twosHigh)
-    if (valueA !== valueB) return valueA - valueB
+    if (valueA !== valueB) {
+      return direction === 'asc' ? valueA - valueB : valueB - valueA
+    }
     // Sort by suit value (clubs lowest to hearts highest)
-    return SUIT_VALUES[a.suit] - SUIT_VALUES[b.suit]
+    const suitDiff = SUIT_VALUES[a.suit] - SUIT_VALUES[b.suit]
+    return direction === 'asc' ? suitDiff : -suitDiff
   })
 }
 

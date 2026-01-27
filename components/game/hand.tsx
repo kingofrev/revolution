@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { Card, getCardValue, isValidRun, isValidBomb } from '@/lib/game/deck'
+import { Card, getCardValue, isValidRun, isValidBomb, sortHand } from '@/lib/game/deck'
 import { PlayingCard } from './card'
+
+export type SortOrder = 'low-high' | 'high-low' | 'manual'
 
 interface HandProps {
   cards: Card[]
@@ -14,6 +16,9 @@ interface HandProps {
   twosHigh?: boolean
   freeSelect?: boolean // Allow selecting any cards without validation (for trading)
   isMyTurn?: boolean // Highlight cards when it's your turn
+  sortOrder?: SortOrder
+  onSortOrderChange?: (order: SortOrder) => void
+  showSortControls?: boolean
 }
 
 // Check if cards could be building toward a bomb
@@ -53,8 +58,47 @@ export function Hand({
   twosHigh = false,
   freeSelect = false,
   isMyTurn = false,
+  sortOrder = 'low-high',
+  onSortOrderChange,
+  showSortControls = false,
 }: HandProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [manualOrder, setManualOrder] = useState<string[]>([])
+  const [draggedCard, setDraggedCard] = useState<string | null>(null)
+
+  // Sort cards based on sortOrder
+  const sortedCards = useMemo(() => {
+    if (sortOrder === 'manual' && manualOrder.length > 0) {
+      // Use manual order, but add any new cards at the end
+      const orderedCards: Card[] = []
+      const cardMap = new Map(cards.map(c => [c.id, c]))
+
+      // Add cards in manual order
+      for (const id of manualOrder) {
+        const card = cardMap.get(id)
+        if (card) {
+          orderedCards.push(card)
+          cardMap.delete(id)
+        }
+      }
+
+      // Add any remaining cards (new cards)
+      for (const card of cardMap.values()) {
+        orderedCards.push(card)
+      }
+
+      return orderedCards
+    }
+
+    return sortHand(cards, twosHigh, sortOrder === 'high-low' ? 'desc' : 'asc')
+  }, [cards, twosHigh, sortOrder, manualOrder])
+
+  // Initialize manual order when switching to manual mode
+  useEffect(() => {
+    if (sortOrder === 'manual' && manualOrder.length === 0 && cards.length > 0) {
+      setManualOrder(sortHand(cards, twosHigh, 'asc').map(c => c.id))
+    }
+  }, [sortOrder, cards, twosHigh, manualOrder.length])
 
   // Only clear selection when actual card IDs change (not just array reference)
   const cardIds = cards.map(c => c.id).join(',')
@@ -177,41 +221,126 @@ export function Hand({
   }
 
   // Adjust overlap based on card count and turn state
-  const baseOverlap = Math.min(40, Math.max(20, 400 / cards.length))
+  const baseOverlap = Math.min(40, Math.max(20, 400 / sortedCards.length))
   const overlap = isMyTurn ? baseOverlap * 0.9 : baseOverlap  // Slightly less overlap when it's your turn
 
+  // Handle drag and drop for manual ordering
+  function handleDragStart(cardId: string) {
+    if (sortOrder !== 'manual') return
+    setDraggedCard(cardId)
+  }
+
+  function handleDragOver(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault()
+    if (!draggedCard || sortOrder !== 'manual') return
+  }
+
+  function handleDrop(e: React.DragEvent, targetIndex: number) {
+    e.preventDefault()
+    if (!draggedCard || sortOrder !== 'manual') return
+
+    const currentOrder = manualOrder.length > 0 ? [...manualOrder] : sortedCards.map(c => c.id)
+    const draggedIndex = currentOrder.indexOf(draggedCard)
+
+    if (draggedIndex === -1 || draggedIndex === targetIndex) {
+      setDraggedCard(null)
+      return
+    }
+
+    // Remove from current position and insert at new position
+    currentOrder.splice(draggedIndex, 1)
+    currentOrder.splice(targetIndex, 0, draggedCard)
+
+    setManualOrder(currentOrder)
+    setDraggedCard(null)
+  }
+
+  function handleDragEnd() {
+    setDraggedCard(null)
+  }
+
   return (
-    <div className={cn(
-      "flex justify-center transition-all duration-300",
-      isMyTurn && "scale-105"  // Slightly larger hand when it's your turn
-    )}>
-      <div
-        className="flex"
-        style={{
-          marginLeft: cards.length > 1 ? `${overlap / 2}px` : 0,
-        }}
-      >
-        {cards.map((card, index) => {
-          const isSelectable = canSelectCard(card)
-          return (
-            <div
-              key={card.id}
-              style={{
-                marginLeft: index === 0 ? 0 : `-${overlap}px`,
-                zIndex: selectedIds.has(card.id) ? 100 : index,
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <PlayingCard
-                card={card}
-                selected={selectedIds.has(card.id)}
-                disabled={!isSelectable}
-                highlighted={isMyTurn}
-                onClick={() => toggleCard(card)}
-              />
-            </div>
-          )
-        })}
+    <div className="flex flex-col items-center gap-2">
+      {showSortControls && onSortOrderChange && (
+        <div className="flex gap-1 mb-1">
+          <button
+            onClick={() => onSortOrderChange('low-high')}
+            className={cn(
+              "px-2 py-1 text-xs rounded transition-colors",
+              sortOrder === 'low-high'
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            )}
+          >
+            Low→High
+          </button>
+          <button
+            onClick={() => onSortOrderChange('high-low')}
+            className={cn(
+              "px-2 py-1 text-xs rounded transition-colors",
+              sortOrder === 'high-low'
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            )}
+          >
+            High→Low
+          </button>
+          <button
+            onClick={() => {
+              setManualOrder(sortedCards.map(c => c.id))
+              onSortOrderChange('manual')
+            }}
+            className={cn(
+              "px-2 py-1 text-xs rounded transition-colors",
+              sortOrder === 'manual'
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            )}
+            title="Drag cards to reorder"
+          >
+            Manual
+          </button>
+        </div>
+      )}
+      <div className={cn(
+        "flex justify-center transition-all duration-300",
+        isMyTurn && "scale-105"  // Slightly larger hand when it's your turn
+      )}>
+        <div
+          className="flex"
+          style={{
+            marginLeft: sortedCards.length > 1 ? `${overlap / 2}px` : 0,
+          }}
+        >
+          {sortedCards.map((card, index) => {
+            const isSelectable = canSelectCard(card)
+            return (
+              <div
+                key={card.id}
+                draggable={sortOrder === 'manual'}
+                onDragStart={() => handleDragStart(card.id)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
+                style={{
+                  marginLeft: index === 0 ? 0 : `-${overlap}px`,
+                  zIndex: selectedIds.has(card.id) ? 100 : (draggedCard === card.id ? 200 : index),
+                  transition: 'all 0.15s ease',
+                  opacity: draggedCard === card.id ? 0.5 : 1,
+                  cursor: sortOrder === 'manual' ? 'grab' : undefined,
+                }}
+              >
+                <PlayingCard
+                  card={card}
+                  selected={selectedIds.has(card.id)}
+                  disabled={!isSelectable}
+                  highlighted={isMyTurn}
+                  onClick={() => toggleCard(card)}
+                />
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

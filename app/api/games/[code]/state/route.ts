@@ -412,11 +412,15 @@ export async function POST(
 
       if (state.passCount >= activePlayers.length - 1) {
         // Everyone passed, clear the pile
+        // The next leader should be the player after whoever made the last play
+        const lastPlayerId = state.lastPlay.playerId
         state.lastPlay = null
         state.passCount = 0
+        // Set next player to be after the one who made the last play
+        state.currentPlayerId = getNextPlayer(state.players, lastPlayerId, state.turnOrder)
+      } else {
+        state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
       }
-
-      state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
 
     } else if (action === 'chat') {
       if (!message || typeof message !== 'string' || message.trim().length === 0) {

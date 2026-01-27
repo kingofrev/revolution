@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/lib/game/deck'
 import { validatePlay } from '@/lib/game/rules'
-import { Hand, OpponentHand } from '@/components/game/hand'
+import { Hand, OpponentHand, SortOrder } from '@/components/game/hand'
 import { PlayArea, ActionButtons, BurnedCards } from '@/components/game/play-area'
 import { Scoreboard, RoundResults, GameOver } from '@/components/game/scoreboard'
 import { Chat } from '@/components/game/chat'
@@ -59,6 +59,21 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [sortOrder, setSortOrder] = useState<SortOrder>('low-high')
+
+  // Load sort preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('revolution-card-sort')
+    if (saved === 'low-high' || saved === 'high-low' || saved === 'manual') {
+      setSortOrder(saved)
+    }
+  }, [])
+
+  // Save sort preference to localStorage
+  function handleSortOrderChange(order: SortOrder) {
+    setSortOrder(order)
+    localStorage.setItem('revolution-card-sort', order)
+  }
 
   const fetchGameState = useCallback(async () => {
     try {
@@ -375,6 +390,9 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
               disabled={!isMyTurn || actionLoading}
               twosHigh={gameState.settings.twosHigh}
               isMyTurn={isMyTurn}
+              sortOrder={sortOrder}
+              onSortOrderChange={handleSortOrderChange}
+              showSortControls={true}
             />
 
             <ActionButtons
