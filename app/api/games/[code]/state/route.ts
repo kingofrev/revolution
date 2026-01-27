@@ -417,12 +417,18 @@ export async function POST(
 
       if (state.passCount >= activePlayers.length - 1) {
         // Everyone passed, clear the pile
-        // The next leader should be the player after whoever made the last play
         const lastPlayerId = state.lastPlay.playerId
+        const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
         state.lastPlay = null
         state.passCount = 0
-        // Set next player to be after the one who made the last play
-        state.currentPlayerId = getNextPlayer(state.players, lastPlayerId, state.turnOrder)
+
+        // The player who made the last play leads again
+        // Unless they've finished, then it goes to the next player
+        if (lastPlayer && !lastPlayer.isFinished) {
+          state.currentPlayerId = lastPlayerId
+        } else {
+          state.currentPlayerId = getNextPlayer(state.players, lastPlayerId, state.turnOrder)
+        }
       } else {
         state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
       }
