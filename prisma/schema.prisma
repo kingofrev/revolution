@@ -17,8 +17,9 @@ model User {
   gamesWon    Int      @default(0)
   createdAt   DateTime @default(now())
 
-  hostedGames Game[]       @relation("GameHost")
+  hostedGames Game[]              @relation("GameHost")
   players     GamePlayer[]
+  gameResults GameHistoryPlayer[]
 }
 
 model Game {
@@ -85,4 +86,37 @@ model Round {
   createdAt DateTime @default(now())
 
   @@unique([gameId, roundNumber])
+}
+
+model GameHistory {
+  id            String   @id @default(cuid())
+  code          String   // Original game code for reference
+  playerCount   Int
+  twosHigh      Boolean
+  tradingEnabled Boolean
+  winScore      Int
+  totalRounds   Int
+
+  winnerId      String   // User ID of the winner
+  winnerName    String   // Cached winner name
+  winnerScore   Int
+
+  completedAt   DateTime @default(now())
+
+  players       GameHistoryPlayer[]
+}
+
+model GameHistoryPlayer {
+  id            String      @id @default(cuid())
+  gameHistory   GameHistory @relation(fields: [gameHistoryId], references: [id], onDelete: Cascade)
+  gameHistoryId String
+  user          User        @relation(fields: [userId], references: [id])
+  userId        String
+
+  playerName    String      // Cached name at time of game
+  finalScore    Int
+  finalPosition Int         // 1st, 2nd, 3rd, etc.
+  isWinner      Boolean     @default(false)
+
+  @@unique([gameHistoryId, userId])
 }

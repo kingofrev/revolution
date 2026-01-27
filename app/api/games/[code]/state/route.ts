@@ -236,6 +236,11 @@ export async function POST(
           state.status = winner ? 'GAME_OVER' : 'ROUND_END'
           state.currentPlayerId = null
 
+          // If game is over, save to history and update user stats
+          if (winner) {
+            await saveGameHistory(state, upperCode)
+          }
+
           await saveGameState(upperCode, state)
           return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
         }
@@ -508,5 +513,53 @@ function maskState(state: any, odlerId: string) {
       handCount: p.hand.length,
     })),
     myHand: state.players.find((p: any) => p.odlerId === odlerId)?.hand || [],
+  }
+}
+
+async function saveGameHistory(state: any, code: string) {
+  try {
+    // Sort players by score to determine final positions
+    const sortedPlayers = [...state.players].sort((a: any, b: any) => b.totalScore - a.totalScore)
+    const winner = sortedPlayers[0]
+
+    // Create game history record
+    const gameHistory = await prisma.gameHistory.create({
+      data: {
+        code,
+        playerCount: state.settings.playerCount,
+        twosHigh: state.settings.twosHigh,
+        tradingEnabled: state.settings.tradingEnabled,
+        winScore: state.settings.winScore,
+        totalRounds: state.currentRound,
+        winnerId: winner.odlerId,
+        winnerName: winner.name,
+        winnerScore: winner.totalScore,
+        players: {
+          create: sortedPlayers.map((p: any, index: number) => ({
+            userId: p.odlerId,
+            playerName: p.name,
+            finalScore: p.totalScore,
+            finalPosition: index + 1,
+            isWinner: index === 0,
+          })),
+        },
+      },
+    })
+
+    // Update user stats
+    for (const player of sortedPlayers) {
+      await prisma.user.update({
+        where: { id: player.odlerId },
+        data: {
+          gamesPlayed: { increment: 1 },
+          ...(player.odlerId === winner.odlerId ? { gamesWon: { increment: 1 } } : {}),
+        },
+      })
+    }
+
+    console.log('Game history saved:', gameHistory.id)
+  } catch (error) {
+    console.error('Failed to save game history:', error)
+    // Don't throw - game should still end even if history fails to save
   }
 }

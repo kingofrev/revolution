@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PlayerStats } from '@/components/stats/player-stats'
 
 export default function HomePage() {
   const { data: session, status } = useSession()
@@ -228,6 +229,8 @@ export default function HomePage() {
             </Tabs>
           </CardContent>
         </Card>
+
+        <PlayerStats />
       </div>
     </div>
   )
