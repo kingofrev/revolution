@@ -178,31 +178,18 @@ export async function DELETE(
 
   try {
     const { code } = await params
-    const game = await prisma.game.findUnique({
-      where: { code: code.toUpperCase() },
-      include: { players: true },
+    const { abandonGame } = await import('@/lib/game/cleanup')
+
+    const result = await abandonGame(code, session.user.id)
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.message }, { status: 400 })
+    }
+
+    return NextResponse.json({
+      message: result.message,
+      gameDeleted: result.gameDeleted
     })
-
-    if (!game) {
-      return NextResponse.json({ error: 'Game not found' }, { status: 404 })
-    }
-
-    const isHost = game.hostId === session.user.id
-    const isPlayer = game.players.some((p) => p.userId === session.user.id)
-
-    if (isHost) {
-      await prisma.game.delete({ where: { id: game.id } })
-      return NextResponse.json({ message: 'Game deleted' })
-    }
-
-    if (isPlayer && game.status === 'LOBBY') {
-      await prisma.gamePlayer.deleteMany({
-        where: { gameId: game.id, userId: session.user.id },
-      })
-      return NextResponse.json({ message: 'Left game' })
-    }
-
-    return NextResponse.json({ error: 'Cannot leave game' }, { status: 400 })
   } catch (error) {
     console.error('Delete game error:', error)
     return NextResponse.json({ error: 'Failed to delete game' }, { status: 500 })

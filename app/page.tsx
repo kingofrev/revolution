@@ -28,6 +28,13 @@ export default function HomePage() {
     }
   }, [session, status, router])
 
+  // Run cleanup of abandoned games on page load (silent, non-blocking)
+  useEffect(() => {
+    if (session) {
+      fetch('/api/games/cleanup', { method: 'POST' }).catch(() => {})
+    }
+  }, [session])
+
   if (status === 'loading' || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-900">

@@ -239,6 +239,28 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
     }
   }
 
+  async function handleAbandonGame() {
+    if (!confirm('Are you sure you want to leave this game? This cannot be undone.')) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/games/${resolvedParams.code}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to leave game')
+        return
+      }
+
+      router.push('/')
+    } catch (err) {
+      setError('Failed to leave game')
+    }
+  }
+
   if (authStatus === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-900">
@@ -282,9 +304,17 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       )}
 
       <div className="flex justify-between items-start mb-4">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-500" />
-          <span className="text-sm text-white/70">Game: {resolvedParams.code}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-sm text-white/70">Game: {resolvedParams.code}</span>
+          </div>
+          <button
+            onClick={handleAbandonGame}
+            className="text-xs text-red-400 hover:text-red-300 hover:underline"
+          >
+            Leave Game
+          </button>
         </div>
         <Scoreboard
           players={gameState.players.map((p) => ({
