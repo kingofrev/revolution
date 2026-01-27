@@ -33,11 +33,17 @@ function getPlayDescription(play: PlayedCards): string {
     'quad': 'Quad',
   }
 
-  const prefix = typeNames[playType] || ''
+  const prefix = playType ? typeNames[playType] || '' : ''
   if (prefix) {
     return `${prefix} ${play.rank}s`
   }
-  return `${play.rank}`
+
+  // Fallback based on card count
+  if (play.count === 1) return `${play.rank}`
+  if (play.count === 2) return `Pair of ${play.rank}s`
+  if (play.count === 3) return `Triple ${play.rank}s`
+  if (play.count === 4) return `Quad ${play.rank}s`
+  return `${play.count} cards`
 }
 
 export function PlayArea({ lastPlay, className }: PlayAreaProps) {
