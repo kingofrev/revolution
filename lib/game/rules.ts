@@ -7,7 +7,7 @@ export interface PlayedCards {
   cards: Card[]
   rank: string
   count: number
-  playType: PlayType
+  playType?: PlayType
   highSuit?: number  // Highest suit value in the play
   runHighCard?: { rank: number; suit: number }  // For runs
   bombHighRank?: number  // For bombs
