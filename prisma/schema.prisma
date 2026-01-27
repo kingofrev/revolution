@@ -37,6 +37,8 @@ model Game {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  gameState Json? // Stores the full game state for active games
+
   players GamePlayer[]
   rounds  Round[]
 }

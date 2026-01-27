@@ -5,8 +5,33 @@ import { prisma } from '@/lib/prisma'
 import { createDeck, shuffleDeck, dealCards, sortHand, getHighestSuitInSet, getRunHighCard, getCardValue, getBombHighRank } from '@/lib/game/deck'
 import { validatePlay, getPlayType, getBestCards, getWorstCards } from '@/lib/game/rules'
 
-// Store game states in memory (in production, use Redis)
-const gameStates = new Map<string, any>()
+// Helper to load game state from database
+async function loadGameState(code: string) {
+  const game = await prisma.game.findUnique({
+    where: { code },
+    include: {
+      players: {
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { seatPosition: 'asc' },
+      },
+    },
+  })
+
+  if (!game) return null
+
+  return {
+    game,
+    state: game.gameState as any,
+  }
+}
+
+// Helper to save game state to database
+async function saveGameState(code: string, state: any) {
+  await prisma.game.update({
+    where: { code },
+    data: { gameState: state },
+  })
+}
 
 export async function GET(
   req: Request,
@@ -22,23 +47,17 @@ export async function GET(
     const { code } = await params
     const upperCode = code.toUpperCase()
 
-    const game = await prisma.game.findUnique({
-      where: { code: upperCode },
-      include: {
-        players: {
-          include: { user: { select: { id: true, name: true } } },
-          orderBy: { seatPosition: 'asc' },
-        },
-      },
-    })
+    const result = await loadGameState(upperCode)
 
-    if (!game) {
+    if (!result) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 })
     }
 
+    const { game, state } = result
+
     // Check if player is in this game
-    const myPlayer = game.players.find(p => p.userId === session.user.id)
-    if (!myPlayer) {
+    const myDbPlayer = game.players.find(p => p.userId === session.user.id)
+    if (!myDbPlayer) {
       return NextResponse.json({ error: 'Not in this game' }, { status: 403 })
     }
 
@@ -48,9 +67,9 @@ export async function GET(
     }
 
     // Get or initialize game state
-    let state = gameStates.get(upperCode)
+    let currentState = state
 
-    if (!state && game.status === 'PLAYING') {
+    if (!currentState && game.status === 'PLAYING') {
       // Initialize game state with dealt cards
       const deck = shuffleDeck(createDeck())
       const hands = dealCards(deck, game.players.length)
@@ -75,7 +94,7 @@ export async function GET(
       // For round 1, turn order is based on seat position
       const turnOrder = players.map(p => p.id)
 
-      state = {
+      currentState = {
         gameId: game.id,
         code: upperCode,
         status: 'PLAYING',
@@ -91,27 +110,28 @@ export async function GET(
         lastPlay: null,
         passCount: 0,
         finishOrder: [],
-        turnOrder, // Order of play for this round
+        turnOrder,
         tradingState: null,
         messages: [],
       }
 
-      gameStates.set(upperCode, state)
+      // Save to database
+      await saveGameState(upperCode, currentState)
     }
 
-    if (!state) {
+    if (!currentState) {
       return NextResponse.json({ error: 'Game state not found' }, { status: 404 })
     }
 
     // Return state with only this player's hand visible
     const maskedState = {
-      ...state,
-      players: state.players.map((p: any) => ({
+      ...currentState,
+      players: currentState.players.map((p: any) => ({
         ...p,
         hand: p.odlerId === session.user.id ? p.hand : p.hand.map(() => ({ hidden: true })),
         handCount: p.hand.length,
       })),
-      myHand: state.players.find((p: any) => p.odlerId === session.user.id)?.hand || [],
+      myHand: currentState.players.find((p: any) => p.odlerId === session.user.id)?.hand || [],
     }
 
     return NextResponse.json(maskedState)
@@ -137,10 +157,12 @@ export async function POST(
     const upperCode = code.toUpperCase()
     const { action, cards, message } = await req.json()
 
-    const state = gameStates.get(upperCode)
-    if (!state) {
+    const result = await loadGameState(upperCode)
+    if (!result || !result.state) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 })
     }
+
+    const state = result.state
 
     const myPlayer = state.players.find((p: any) => p.odlerId === session.user.id)
     if (!myPlayer) {
@@ -212,7 +234,7 @@ export async function POST(
           state.status = winner ? 'GAME_OVER' : 'ROUND_END'
           state.currentPlayerId = null
 
-          gameStates.set(upperCode, state)
+          await saveGameState(upperCode, state)
           return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
         }
       }
@@ -265,7 +287,7 @@ export async function POST(
           prevFinishOrder,
         }
 
-        gameStates.set(upperCode, state)
+        await saveGameState(upperCode, state)
         return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
       }
 
@@ -280,7 +302,7 @@ export async function POST(
       state.turnOrder = prevFinishOrder // Turn order follows previous round's finish order
       state.tradingState = null
 
-      gameStates.set(upperCode, state)
+      await saveGameState(upperCode, state)
       return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
 
     } else if (action === 'trade') {
@@ -361,7 +383,7 @@ export async function POST(
         state.tradingState = null
       }
 
-      gameStates.set(upperCode, state)
+      await saveGameState(upperCode, state)
       return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
 
     } else if (action === 'pass') {
@@ -407,11 +429,11 @@ export async function POST(
         state.messages = state.messages.slice(-50)
       }
 
-      gameStates.set(upperCode, state)
+      await saveGameState(upperCode, state)
       return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
     }
 
-    gameStates.set(upperCode, state)
+    await saveGameState(upperCode, state)
     return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
   } catch (error) {
     console.error('Game action error:', error)
