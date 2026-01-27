@@ -56,7 +56,10 @@ export async function POST(
     const game = await prisma.game.findUnique({
       where: { code: code.toUpperCase() },
       include: {
-        players: true,
+        players: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        host: { select: { id: true, name: true } },
       },
     })
 
@@ -64,17 +67,21 @@ export async function POST(
       return NextResponse.json({ error: 'Game not found' }, { status: 404 })
     }
 
+    // Check if player is already in the game
+    const existingPlayer = game.players.find((p) => p.userId === session.user.id)
+
+    // If player is already in the game, allow them to rejoin (return game data)
+    if (existingPlayer) {
+      return NextResponse.json({ ...game, rejoin: true })
+    }
+
+    // If game already started, don't allow new players
     if (game.status !== 'LOBBY') {
       return NextResponse.json({ error: 'Game already started' }, { status: 400 })
     }
 
     if (game.players.length >= game.playerCount) {
       return NextResponse.json({ error: 'Game is full' }, { status: 400 })
-    }
-
-    const existingPlayer = game.players.find((p) => p.userId === session.user.id)
-    if (existingPlayer) {
-      return NextResponse.json({ error: 'Already in game' }, { status: 400 })
     }
 
     const nextSeat = game.players.length

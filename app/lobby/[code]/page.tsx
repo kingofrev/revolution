@@ -63,13 +63,14 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
   }, [session, authStatus, router, resolvedParams.code])
 
   useEffect(() => {
-    if (gameState?.status === 'PLAYING') {
+    if (gameState?.status === 'PLAYING' || gameState?.status === 'TRADING' || gameState?.status === 'ROUND_END') {
       router.push(`/play/${resolvedParams.code}`)
     }
   }, [gameState?.status, router, resolvedParams.code])
 
   useEffect(() => {
-    if (game?.status === 'PLAYING') {
+    // Redirect to play page if game is in progress (any non-LOBBY status)
+    if (game?.status && game.status !== 'LOBBY') {
       router.push(`/play/${resolvedParams.code}`)
     }
   }, [game?.status, router, resolvedParams.code])

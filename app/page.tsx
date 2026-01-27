@@ -82,7 +82,15 @@ export default function HomePage() {
         throw new Error(data.error || 'Failed to join game')
       }
 
-      router.push(`/lobby/${joinCode.toUpperCase()}`)
+      const game = await res.json()
+      const code = joinCode.toUpperCase()
+
+      // If game is in progress, redirect to play page instead of lobby
+      if (game.status && game.status !== 'LOBBY') {
+        router.push(`/play/${code}`)
+      } else {
+        router.push(`/lobby/${code}`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
