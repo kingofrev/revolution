@@ -329,43 +329,119 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
 
     const lastPlayCount = gameState.lastPlay.count
     const lastPlayType = gameState.lastPlay.playType
+    const twosHigh = gameState.settings.twosHigh
+
+    // Helper to get card value
+    const getCardValue = (rank: string): number => {
+      if (twosHigh && rank === '2') return 15
+      const values: Record<string, number> = {
+        '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+        '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14,
+      }
+      return values[rank] || 0
+    }
+
+    const suitValues: Record<string, number> = {
+      'clubs': 0, 'spades': 1, 'diamonds': 2, 'hearts': 3
+    }
 
     // If player doesn't have enough cards, they can't play
     if (hand.length < lastPlayCount) return false
 
-    // Check if any combination of cards could beat the last play
-    // For efficiency, just check if player has cards of the right type
+    // Group cards by rank
+    const rankCounts: Record<string, Card[]> = {}
+    for (const card of hand) {
+      if (!rankCounts[card.rank]) rankCounts[card.rank] = []
+      rankCounts[card.rank].push(card)
+    }
+
+    // Check for bombs first (can beat anything)
+    const ranksWithPairs = Object.entries(rankCounts)
+      .filter(([_, cards]) => cards.length >= 2)
+      .map(([rank, cards]) => ({ rank, value: getCardValue(rank), cards }))
+      .sort((a, b) => a.value - b.value)
+
+    // Check for 3 consecutive pairs (bomb)
+    for (let i = 0; i <= ranksWithPairs.length - 3; i++) {
+      if (ranksWithPairs[i + 1].value === ranksWithPairs[i].value + 1 &&
+          ranksWithPairs[i + 2].value === ranksWithPairs[i + 1].value + 1) {
+        // Found a potential bomb - if beating a bomb, check if it's higher
+        if (lastPlayType === 'bomb' && gameState.lastPlay.bombHighRank) {
+          if (ranksWithPairs[i + 2].value > gameState.lastPlay.bombHighRank) {
+            return true
+          }
+        } else {
+          // Bomb beats non-bombs
+          return true
+        }
+      }
+    }
 
     if (lastPlayType === 'bomb') {
-      // Need a higher bomb - very rare, just return true if they have 6+ cards
-      return hand.length >= 6
+      // Can only beat with higher bomb (checked above)
+      return false
     }
 
     if (lastPlayType === 'run') {
-      // Need a run of same length - check if they have enough cards
-      return hand.length >= lastPlayCount
+      // Need a run of same length with higher high card
+      const lastRunHigh = gameState.lastPlay.runHighCard
+      if (!lastRunHigh) return true // Safety fallback
+
+      // Find all possible runs of the required length
+      const cardsByValue = hand.map(c => ({
+        card: c,
+        value: getCardValue(c.rank),
+        suitValue: suitValues[c.suit] || 0
+      })).sort((a, b) => a.value - b.value)
+
+      // Group by value
+      const valueGroups: Record<number, typeof cardsByValue> = {}
+      for (const c of cardsByValue) {
+        if (!valueGroups[c.value]) valueGroups[c.value] = []
+        valueGroups[c.value].push(c)
+      }
+
+      const uniqueValues = Object.keys(valueGroups).map(Number).sort((a, b) => a - b)
+
+      // Find consecutive sequences
+      for (let i = 0; i <= uniqueValues.length - lastPlayCount; i++) {
+        let isConsecutive = true
+        for (let j = 1; j < lastPlayCount; j++) {
+          if (uniqueValues[i + j] !== uniqueValues[i] + j) {
+            isConsecutive = false
+            break
+          }
+        }
+        if (isConsecutive) {
+          // Found a run - check if it beats the last play
+          const highValue = uniqueValues[i + lastPlayCount - 1]
+          const highCards = valueGroups[highValue]
+          const bestSuit = Math.max(...highCards.map(c => c.suitValue))
+
+          // Compare: higher rank wins, or same rank with higher suit
+          if (highValue > lastRunHigh.rank) return true
+          if (highValue === lastRunHigh.rank && bestSuit > lastRunHigh.suit) return true
+        }
+      }
+      return false
     }
 
-    // For singles, pairs, triples, quads - check if player has any groups of that size
-    const rankCounts: Record<string, number> = {}
-    for (const card of hand) {
-      rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1
-    }
+    // For singles, pairs, triples, quads
+    const lastRank = getCardValue(gameState.lastPlay.rank)
+    const lastHighSuit = gameState.lastPlay.highSuit ?? 0
 
-    // Check if any rank has enough cards
-    for (const count of Object.values(rankCounts)) {
-      if (count >= lastPlayCount) return true
-    }
-
-    // Also check for bombs (can beat anything)
-    // A bomb needs 3 consecutive pairs
-    const sortedRanks = Object.entries(rankCounts)
-      .filter(([_, count]) => count >= 2)
-      .map(([rank, _]) => rank)
-
-    if (sortedRanks.length >= 3) {
-      // Potentially could have a bomb - return true to be safe
-      return true
+    for (const [rank, cards] of Object.entries(rankCounts)) {
+      if (cards.length >= lastPlayCount) {
+        const rankValue = getCardValue(rank)
+        // Higher rank always wins
+        if (rankValue > lastRank) return true
+        // Same rank - check suit (get best suits from available cards)
+        if (rankValue === lastRank) {
+          const sortedBySuit = cards.sort((a, b) => suitValues[b.suit] - suitValues[a.suit])
+          const bestSuit = suitValues[sortedBySuit[0].suit]
+          if (bestSuit > lastHighSuit) return true
+        }
+      }
     }
 
     return false
@@ -412,7 +488,7 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       </div>
 
       {/* Card Table with all players */}
-      <div className="flex-1 flex items-center justify-center py-4">
+      <div className="flex-1 flex items-start justify-center pt-2">
         <CardTable
           players={allPlayersInTurnOrder.map((p, index) => ({
             id: p.id,

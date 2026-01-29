@@ -284,7 +284,12 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
           <div className="flex flex-col items-center gap-2">
             <CardStack cards={lastPlay.cards} size="md" />
             <div className="text-sm font-medium text-emerald-100 bg-black/30 px-3 py-1 rounded-full">
-              {getPlayDescription(lastPlay)}
+              {(() => {
+                const playedBy = players.find(p => p.id === lastPlay.playerId)
+                const playerName = playedBy?.name || 'Unknown'
+                const rankEmoji = playedBy?.currentRank ? rankEmojis[playedBy.currentRank] + ' ' : ''
+                return `${rankEmoji}${playerName}: ${getPlayDescription(lastPlay)}`
+              })()}
             </div>
           </div>
         ) : (
