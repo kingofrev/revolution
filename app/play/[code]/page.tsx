@@ -346,6 +346,54 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
 
   const canPassTurn = isMyTurn && gameState.lastPlay !== null
 
+  // Check if player has ANY valid plays available
+  const hasAnyValidPlay = (() => {
+    if (!isMyTurn || !gameState.lastPlay) return true // Leading - can always play something
+
+    const lastPlayCount = gameState.lastPlay.count
+    const lastPlayType = gameState.lastPlay.playType
+
+    // If player doesn't have enough cards, they can't play
+    if (hand.length < lastPlayCount) return false
+
+    // Check if any combination of cards could beat the last play
+    // For efficiency, just check if player has cards of the right type
+
+    if (lastPlayType === 'bomb') {
+      // Need a higher bomb - very rare, just return true if they have 6+ cards
+      return hand.length >= 6
+    }
+
+    if (lastPlayType === 'run') {
+      // Need a run of same length - check if they have enough cards
+      return hand.length >= lastPlayCount
+    }
+
+    // For singles, pairs, triples, quads - check if player has any groups of that size
+    const rankCounts: Record<string, number> = {}
+    for (const card of hand) {
+      rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1
+    }
+
+    // Check if any rank has enough cards
+    for (const count of Object.values(rankCounts)) {
+      if (count >= lastPlayCount) return true
+    }
+
+    // Also check for bombs (can beat anything)
+    // A bomb needs 3 consecutive pairs
+    const sortedRanks = Object.entries(rankCounts)
+      .filter(([_, count]) => count >= 2)
+      .map(([rank, _]) => rank)
+
+    if (sortedRanks.length >= 3) {
+      // Potentially could have a bomb - return true to be safe
+      return true
+    }
+
+    return false
+  })()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-slate-900 p-4 flex flex-col">
       {error && (
@@ -521,6 +569,7 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
               onPlay={handlePlay}
               onPass={handlePass}
               isMyTurn={isMyTurn}
+              mustPass={canPassTurn && !hasAnyValidPlay}
             />
           </div>
         )}
