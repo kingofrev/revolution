@@ -205,6 +205,16 @@ export async function POST(
       }
       state.passCount = 0
 
+      // Set last action message
+      state.lastAction = {
+        type: 'play',
+        playerId: myPlayer.id,
+        playerName: myPlayer.name,
+        playerRank: myPlayer.currentRank,
+        description: describePlay(cards, playType, state.settings.twosHigh),
+        autoSkipped: [] as { playerId: string; playerName: string; playerRank: string | null }[],
+      }
+
       // Check if player finished
       if (myPlayer.hand.length === 0) {
         myPlayer.isFinished = true
@@ -246,8 +256,39 @@ export async function POST(
         }
       }
 
-      // Next player
-      state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
+      // Next player - auto-skip players who don't have enough cards
+      const requiredCards = state.lastPlay?.count || 1
+      const { nextPlayerId, skipped } = getNextValidPlayer(
+        state.players,
+        myPlayer.id,
+        state.turnOrder,
+        requiredCards
+      )
+      state.currentPlayerId = nextPlayerId
+
+      // Track auto-skipped players
+      if (skipped.length > 0 && state.lastAction) {
+        state.lastAction.autoSkipped = skipped.map((p: any) => ({
+          playerId: p.id,
+          playerName: p.name,
+          playerRank: p.currentRank,
+        }))
+      }
+
+      // If everyone was skipped (pile clears), the player who played leads again
+      if (skipped.length > 0) {
+        const activePlayers = state.players.filter((p: any) => !p.isFinished)
+        // Check if we've gone around (all other active players were skipped)
+        const nonSkippedActive = activePlayers.filter(
+          (p: any) => p.id === myPlayer.id || !skipped.some((s: any) => s.id === p.id)
+        )
+        if (nonSkippedActive.length === 1 && nonSkippedActive[0].id === myPlayer.id && !myPlayer.isFinished) {
+          // Everyone else was skipped, this player leads again
+          state.lastPlay = null
+          state.passCount = 0
+          state.currentPlayerId = myPlayer.id
+        }
+      }
 
     } else if (action === 'next-round') {
       // Start next round
@@ -412,6 +453,16 @@ export async function POST(
         return NextResponse.json({ error: 'Cannot pass when leading' }, { status: 400 })
       }
 
+      // Set last action for pass
+      state.lastAction = {
+        type: 'pass',
+        playerId: myPlayer.id,
+        playerName: myPlayer.name,
+        playerRank: myPlayer.currentRank,
+        description: 'passed',
+        autoSkipped: [],
+      }
+
       state.passCount++
       const activePlayers = state.players.filter((p: any) => !p.isFinished)
 
@@ -508,6 +559,99 @@ function getNextPlayer(players: any[], currentPlayerId: string, turnOrder: strin
 
   // Fallback (shouldn't happen)
   return turnOrder[0]
+}
+
+// Get next valid player, auto-skipping those with fewer cards than required
+function getNextValidPlayer(
+  players: any[],
+  currentPlayerId: string,
+  turnOrder: string[],
+  requiredCards: number
+): { nextPlayerId: string; skipped: any[] } {
+  const currentIndex = turnOrder.indexOf(currentPlayerId)
+  const playerCount = turnOrder.length
+  let nextIndex = (currentIndex + 1) % playerCount
+  let attempts = 0
+  const skipped: any[] = []
+
+  while (attempts < playerCount) {
+    const nextPlayerId = turnOrder[nextIndex]
+    const nextPlayer = players.find((p: any) => p.id === nextPlayerId)
+
+    if (nextPlayer && !nextPlayer.isFinished) {
+      // Check if player has enough cards
+      if (nextPlayer.hand.length >= requiredCards) {
+        return { nextPlayerId, skipped }
+      } else {
+        // Auto-skip this player
+        skipped.push(nextPlayer)
+      }
+    }
+
+    nextIndex = (nextIndex + 1) % playerCount
+    attempts++
+
+    // If we've gone all the way around back to the original player
+    if (nextIndex === (currentIndex + 1) % playerCount && attempts > 0) {
+      break
+    }
+  }
+
+  // If everyone was skipped, return the original player (they lead again)
+  const currentPlayer = players.find((p: any) => p.id === currentPlayerId)
+  if (currentPlayer && !currentPlayer.isFinished) {
+    return { nextPlayerId: currentPlayerId, skipped }
+  }
+
+  // Fallback - find any active player
+  const activePlayers = players.filter((p: any) => !p.isFinished)
+  return { nextPlayerId: activePlayers[0]?.id || turnOrder[0], skipped }
+}
+
+// Describe a play for the action caption
+function describePlay(cards: any[], playType: string, twosHigh: boolean): string {
+  const count = cards.length
+  const rank = cards[0].rank
+
+  // Get rank name
+  const rankNames: Record<string, string> = {
+    'A': 'Aces', 'K': 'Kings', 'Q': 'Queens', 'J': 'Jacks',
+    '10': 'Tens', '9': 'Nines', '8': 'Eights', '7': 'Sevens',
+    '6': 'Sixes', '5': 'Fives', '4': 'Fours', '3': 'Threes', '2': 'Twos'
+  }
+  const rankName = rankNames[rank] || rank + 's'
+  const singleRankName = rankName.slice(0, -1) // Remove 's' for singular
+
+  if (playType === 'bomb') {
+    // Get the high rank of the bomb
+    const values = cards.map((c: any) => getCardValue(c.rank, twosHigh))
+    const highValue = Math.max(...values)
+    const highRank = cards.find((c: any) => getCardValue(c.rank, twosHigh) === highValue)?.rank
+    const highRankName = highRank ? (rankNames[highRank]?.slice(0, -1) || highRank) : 'unknown'
+    return `a Bomb (${highRankName} high)`
+  }
+
+  if (playType === 'run') {
+    // Get the high card of the run
+    const values = cards.map((c: any) => getCardValue(c.rank, twosHigh))
+    const highValue = Math.max(...values)
+    const highCard = cards.find((c: any) => getCardValue(c.rank, twosHigh) === highValue)
+    const highRankName = highCard ? (rankNames[highCard.rank]?.slice(0, -1) || highCard.rank) : 'unknown'
+    return `a ${count}-card Run (${highRankName} high)`
+  }
+
+  // Singles, pairs, triples, quads
+  if (count === 1) {
+    return `a ${singleRankName}`
+  } else if (count === 2) {
+    return `a Pair of ${rankName}`
+  } else if (count === 3) {
+    return `Triple ${rankName}`
+  } else if (count === 4) {
+    return `Quad ${rankName}`
+  }
+
+  return `${count} ${rankName}`
 }
 
 function maskState(state: any, odlerId: string) {

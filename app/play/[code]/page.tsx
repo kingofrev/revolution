@@ -28,6 +28,19 @@ interface TradingState {
   queenTraded: boolean
 }
 
+interface LastAction {
+  type: 'play' | 'pass'
+  playerId: string
+  playerName: string
+  playerRank: string | null
+  description: string
+  autoSkipped: {
+    playerId: string
+    playerName: string
+    playerRank: string | null
+  }[]
+}
+
 interface GameState {
   gameId: string
   code: string
@@ -48,6 +61,7 @@ interface GameState {
   messages?: ChatMessage[]
   tradingState?: TradingState | null
   burnedCards?: Card[]
+  lastAction?: LastAction | null
 }
 
 export default function PlayPage({ params }: { params: Promise<{ code: string }> }) {
@@ -406,7 +420,48 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             ))}
           </div>
 
-          <PlayArea lastPlay={gameState.lastPlay} className="flex-1 max-w-md mx-4" />
+          <div className="flex-1 max-w-md mx-4 flex flex-col items-center">
+            {/* Action Caption */}
+            {gameState.lastAction && (
+              <div className="mb-3 text-center">
+                <div className="bg-slate-800/80 rounded-lg px-4 py-2 inline-block">
+                  <span className="text-white">
+                    {gameState.lastAction.playerRank && (
+                      <span className="text-yellow-400">
+                        {gameState.lastAction.playerRank === 'KING' ? '👑 ' :
+                         gameState.lastAction.playerRank === 'QUEEN' ? '👸 ' :
+                         gameState.lastAction.playerRank === 'NOBLE' ? '🎩 ' : '🧑‍🌾 '}
+                      </span>
+                    )}
+                    <span className="font-medium">{gameState.lastAction.playerName}</span>
+                    {gameState.lastAction.type === 'play' ? (
+                      <span className="text-emerald-400"> played {gameState.lastAction.description}</span>
+                    ) : (
+                      <span className="text-slate-400"> passed</span>
+                    )}
+                  </span>
+                </div>
+                {/* Auto-skipped players */}
+                {gameState.lastAction.autoSkipped && gameState.lastAction.autoSkipped.length > 0 && (
+                  <div className="mt-1">
+                    {gameState.lastAction.autoSkipped.map((skipped) => (
+                      <div key={skipped.playerId} className="text-sm text-orange-400">
+                        {skipped.playerRank && (
+                          <span>
+                            {skipped.playerRank === 'KING' ? '👑 ' :
+                             skipped.playerRank === 'QUEEN' ? '👸 ' :
+                             skipped.playerRank === 'NOBLE' ? '🎩 ' : '🧑‍🌾 '}
+                          </span>
+                        )}
+                        {skipped.playerName} was auto-passed (not enough cards)
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <PlayArea lastPlay={gameState.lastPlay} />
+          </div>
 
           {/* Right position */}
           <div className="w-48">
