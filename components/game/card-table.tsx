@@ -8,16 +8,16 @@ import { CardStack } from './card'
 interface Player {
   id: string
   name: string
-  odlerId: string
+  orderId: number            // Position in turn order (0 = first/King)
   handCount: number
   currentRank: string | null
   isFinished: boolean
   isCurrentTurn: boolean
+  isMe: boolean              // Is this the current user?
 }
 
 interface CardTableProps {
-  players: Player[]           // All players sorted by rank (King first)
-  myPlayerId: string          // Current user's player ID
+  players: Player[]           // All players in turn order (first player at index 0)
   lastPlay: PlayedCards | null
   lastAction?: {
     type: 'play' | 'pass'
@@ -79,11 +79,13 @@ function getPlayDescription(play: PlayedCards): string {
 function FaceDownCards({
   count,
   position,
-  isCurrentTurn
+  isCurrentTurn,
+  isMe = false
 }: {
   count: number
   position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right'
   isCurrentTurn: boolean
+  isMe?: boolean
 }) {
   const cards = Array.from({ length: Math.min(count, 13) })
 
@@ -114,11 +116,13 @@ function FaceDownCards({
         <div
           key={index}
           className={cn(
-            'w-8 h-11 rounded-md border border-slate-400/50',
+            'w-8 h-11 rounded-md border',
             'bg-gradient-to-br from-indigo-800 via-blue-700 to-indigo-900',
             'shadow-md',
             rotations[position],
-            isCurrentTurn && 'ring-2 ring-yellow-400'
+            isCurrentTurn && 'ring-2 ring-yellow-400 animate-pulse',
+            isMe && !isCurrentTurn && 'border-emerald-400/70',
+            !isMe && !isCurrentTurn && 'border-slate-400/50'
           )}
           style={{
             marginLeft: !isVertical && index > 0 ? '-20px' : 0,
@@ -145,16 +149,18 @@ function PlayerPlate({
     <div className={cn(
       'flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r shadow-lg',
       rankGradient,
-      player.isCurrentTurn && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900'
+      player.isCurrentTurn && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900',
+      player.isMe && !player.isCurrentTurn && 'ring-1 ring-emerald-400/50'
     )}>
       {player.currentRank && (
         <span className="text-sm">{rankEmojis[player.currentRank]}</span>
       )}
       <span className={cn(
         'text-sm font-medium text-white',
-        player.isCurrentTurn && 'text-yellow-200'
+        player.isCurrentTurn && 'text-yellow-200',
+        player.isMe && '!text-emerald-300'
       )}>
-        {player.name}
+        {player.name}{player.isMe && ' (You)'}
       </span>
       {!player.isFinished && (
         <span className="text-xs bg-black/30 px-1.5 py-0.5 rounded text-white/80">
@@ -165,25 +171,20 @@ function PlayerPlate({
   )
 }
 
-export function CardTable({ players, myPlayerId, lastPlay, lastAction }: CardTableProps) {
-  // Filter out the current player for positioning around the table
-  const otherPlayers = players.filter(p => p.id !== myPlayerId)
-  const playerCount = players.length
-
-  // Get positions for other players (clockwise from top, starting with King)
-  // 3 others: top, right, left
-  // 4 others: top, right, left, and one more
-  // 5 others: spread around
-  const getPositions = () => {
-    const count = otherPlayers.length
-    if (count === 1) return ['top']
-    if (count === 2) return ['top', 'right']
-    if (count === 3) return ['top', 'right', 'left']
-    if (count === 4) return ['top-left', 'top-right', 'right', 'left']
-    return ['top-left', 'top', 'top-right', 'right', 'left']
+export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
+  // Get fixed positions for all players based on player count
+  // 1st player always at top, then counter-clockwise (left, bottom, right)
+  const getPositions = (count: number): string[] => {
+    if (count === 4) return ['top', 'left', 'bottom', 'right']
+    if (count === 5) return ['top', 'top-left', 'left', 'bottom', 'right']
+    if (count === 6) return ['top', 'top-left', 'left', 'bottom', 'right', 'top-right']
+    // Fallback for smaller games
+    if (count === 3) return ['top', 'left', 'right']
+    if (count === 2) return ['top', 'bottom']
+    return ['top']
   }
 
-  const positions = getPositions()
+  const positions = getPositions(players.length)
 
   // Position styles for each spot around the table
   const positionStyles: Record<string, string> = {
@@ -224,7 +225,7 @@ export function CardTable({ players, myPlayerId, lastPlay, lastAction }: CardTab
       </div>
 
       {/* Players around the table */}
-      {otherPlayers.map((player, index) => {
+      {players.map((player, index) => {
         const position = positions[index] || 'top'
         return (
           <div
@@ -239,6 +240,7 @@ export function CardTable({ players, myPlayerId, lastPlay, lastAction }: CardTab
               count={player.handCount}
               position={position as any}
               isCurrentTurn={player.isCurrentTurn}
+              isMe={player.isMe}
             />
           </div>
         )

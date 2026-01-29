@@ -303,10 +303,9 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
     PEASANT: 3,
   }
 
-  // Sort other players by rank, with King at the "top" of the table
-  // If no ranks yet (round 1), use original order
-  const otherPlayers = gameState.players
-    .filter((p) => p.odlerId !== session?.user?.id)
+  // Sort ALL players in turn order for the card table
+  // 1st player (King or seat 0 in round 1) at top, then counter-clockwise
+  const allPlayersInTurnOrder = [...gameState.players]
     .sort((a, b) => {
       const rankA = a.currentRank ? rankOrder[a.currentRank] ?? 99 : 99
       const rankB = b.currentRank ? rankOrder[b.currentRank] ?? 99 : 99
@@ -415,16 +414,16 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       {/* Card Table with all players */}
       <div className="flex-1 flex items-center justify-center py-4">
         <CardTable
-          players={otherPlayers.map((p) => ({
+          players={allPlayersInTurnOrder.map((p, index) => ({
             id: p.id,
             name: p.name,
-            odlerId: p.odlerId,
+            orderId: index,
             handCount: p.handCount || 0,
             currentRank: p.currentRank,
             isFinished: p.isFinished,
             isCurrentTurn: p.id === gameState.currentPlayerId,
+            isMe: p.odlerId === session?.user?.id,
           }))}
-          myPlayerId={myPlayer?.id || ''}
           lastPlay={gameState.lastPlay}
           lastAction={gameState.lastAction}
         />
