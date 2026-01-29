@@ -278,8 +278,50 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
   }
 
   const myPlayer = gameState.players.find((p) => p.odlerId === session?.user?.id)
-  const otherPlayers = gameState.players.filter((p) => p.odlerId !== session?.user?.id)
   const hand = gameState.myHand || []
+
+  // Rank order for sorting (King first)
+  const rankOrder: Record<string, number> = {
+    KING: 0,
+    QUEEN: 1,
+    NOBLE: 2,
+    PEASANT: 3,
+  }
+
+  // Sort other players by rank, with King at the "top" of the table
+  // If no ranks yet (round 1), use original order
+  const otherPlayers = gameState.players
+    .filter((p) => p.odlerId !== session?.user?.id)
+    .sort((a, b) => {
+      const rankA = a.currentRank ? rankOrder[a.currentRank] ?? 99 : 99
+      const rankB = b.currentRank ? rankOrder[b.currentRank] ?? 99 : 99
+      if (rankA !== rankB) return rankA - rankB
+      // Same rank - maintain seat position order
+      return a.seatPosition - b.seatPosition
+    })
+
+  // Arrange players around the table:
+  // - King (or highest rank) at top center
+  // - Others distributed around
+  const getTablePositions = () => {
+    const count = otherPlayers.length
+    // For different player counts, assign positions
+    // Positions: top (can have 1-2), left, right
+    if (count <= 1) {
+      return { top: otherPlayers.slice(0, 1), left: [], right: [] }
+    } else if (count === 2) {
+      return { top: [otherPlayers[0]], left: [otherPlayers[1]], right: [] }
+    } else if (count === 3) {
+      return { top: [otherPlayers[0]], left: [otherPlayers[1]], right: [otherPlayers[2]] }
+    } else if (count === 4) {
+      return { top: otherPlayers.slice(0, 2), left: [otherPlayers[2]], right: [otherPlayers[3]] }
+    } else {
+      // 5 other players
+      return { top: otherPlayers.slice(0, 2), left: [otherPlayers[2]], right: [otherPlayers[3], otherPlayers[4]] }
+    }
+  }
+
+  const tablePositions = getTablePositions()
 
   const isMyTurn = myPlayer?.id === gameState.currentPlayerId
 
@@ -331,8 +373,9 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       </div>
 
       <div className="flex-1 flex flex-col justify-center">
+        {/* Top position - King (or highest rank) */}
         <div className="flex justify-center mb-4">
-          {otherPlayers.slice(0, 2).map((player) => (
+          {tablePositions.top.map((player) => (
             <div key={player.id} className="mx-4">
               <OpponentHand
                 cardCount={player.handCount || 0}
@@ -347,48 +390,39 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         </div>
 
         <div className="flex justify-between items-center">
+          {/* Left position */}
           <div className="w-48">
-            {otherPlayers[2] && (
-              <OpponentHand
-                cardCount={otherPlayers[2].handCount || 0}
-                position="left"
-                playerName={otherPlayers[2].name}
-                isCurrentTurn={otherPlayers[2].id === gameState.currentPlayerId}
-                isFinished={otherPlayers[2].isFinished}
-                rank={otherPlayers[2].currentRank}
-              />
-            )}
+            {tablePositions.left.map((player) => (
+              <div key={player.id} className="mb-2">
+                <OpponentHand
+                  cardCount={player.handCount || 0}
+                  position="left"
+                  playerName={player.name}
+                  isCurrentTurn={player.id === gameState.currentPlayerId}
+                  isFinished={player.isFinished}
+                  rank={player.currentRank}
+                />
+              </div>
+            ))}
           </div>
 
           <PlayArea lastPlay={gameState.lastPlay} className="flex-1 max-w-md mx-4" />
 
+          {/* Right position */}
           <div className="w-48">
-            {otherPlayers[3] && (
-              <OpponentHand
-                cardCount={otherPlayers[3].handCount || 0}
-                position="right"
-                playerName={otherPlayers[3].name}
-                isCurrentTurn={otherPlayers[3].id === gameState.currentPlayerId}
-                isFinished={otherPlayers[3].isFinished}
-                rank={otherPlayers[3].currentRank}
-              />
-            )}
+            {tablePositions.right.map((player) => (
+              <div key={player.id} className="mb-2">
+                <OpponentHand
+                  cardCount={player.handCount || 0}
+                  position="right"
+                  playerName={player.name}
+                  isCurrentTurn={player.id === gameState.currentPlayerId}
+                  isFinished={player.isFinished}
+                  rank={player.currentRank}
+                />
+              </div>
+            ))}
           </div>
-        </div>
-
-        <div className="flex justify-center mt-4">
-          {otherPlayers.slice(4).map((player) => (
-            <div key={player.id} className="mx-4">
-              <OpponentHand
-                cardCount={player.handCount || 0}
-                position="top"
-                playerName={player.name}
-                isCurrentTurn={player.id === gameState.currentPlayerId}
-                isFinished={player.isFinished}
-                rank={player.currentRank}
-              />
-            </div>
-          ))}
         </div>
       </div>
 

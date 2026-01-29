@@ -355,6 +355,20 @@ interface OpponentHandProps {
   rank?: string | null
 }
 
+const rankEmojis: Record<string, string> = {
+  KING: '👑',
+  QUEEN: '👸',
+  NOBLE: '🎩',
+  PEASANT: '🧑‍🌾',
+}
+
+const rankColors: Record<string, string> = {
+  KING: 'text-yellow-400',
+  QUEEN: 'text-purple-400',
+  NOBLE: 'text-blue-400',
+  PEASANT: 'text-slate-400',
+}
+
 export function OpponentHand({
   cardCount,
   position,
@@ -364,45 +378,74 @@ export function OpponentHand({
   rank,
 }: OpponentHandProps) {
   const positionClasses = {
-    top: 'flex-row',
+    top: 'flex-col',
     left: 'flex-col',
     right: 'flex-col',
   }
 
-  const cards = Array.from({ length: Math.min(cardCount, 13) })
+  const cards = Array.from({ length: Math.min(cardCount, 10) })
 
   return (
     <div
       className={cn(
-        'flex items-center gap-2',
+        'flex items-center gap-3',
         positionClasses[position],
-        isCurrentTurn && 'animate-pulse'
+        isCurrentTurn && !isFinished && 'scale-105'
       )}
     >
-      <div className="flex items-center gap-1">
-        {cards.map((_, index) => (
-          <div
-            key={index}
-            className="w-8 h-12 rounded bg-gradient-to-br from-blue-900 to-blue-700 border border-slate-600"
-            style={{
-              marginLeft: index === 0 ? 0 : '-20px',
-              zIndex: index,
-            }}
-          />
-        ))}
-      </div>
-      <div className="text-center">
-        <div className={cn('text-sm font-medium', isCurrentTurn && 'text-yellow-400')}>
-          {playerName}
+      {/* Player info */}
+      <div className={cn(
+        'flex items-center gap-2 px-3 py-1.5 rounded-full',
+        isCurrentTurn && !isFinished ? 'bg-yellow-500/20 ring-2 ring-yellow-400' : 'bg-slate-800/60'
+      )}>
+        {rank && (
+          <span className="text-base" title={rank}>
+            {rankEmojis[rank]}
+          </span>
+        )}
+        <div className="text-center">
+          <div className={cn(
+            'text-sm font-medium',
+            isCurrentTurn && !isFinished ? 'text-yellow-300' : 'text-white'
+          )}>
+            {playerName}
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {isFinished ? (
-            <span className="text-emerald-400">{rank || 'Finished'}</span>
-          ) : (
-            `${cardCount} cards`
-          )}
-        </div>
+        {!isFinished && (
+          <span className="text-xs text-slate-400 bg-slate-700/50 px-1.5 py-0.5 rounded">
+            {cardCount}
+          </span>
+        )}
+        {isFinished && rank && (
+          <span className={cn('text-xs font-medium', rankColors[rank])}>
+            {rank}
+          </span>
+        )}
       </div>
+
+      {/* Cards */}
+      {!isFinished && cardCount > 0 && (
+        <div className="flex items-center justify-center">
+          {cards.map((_, index) => (
+            <div
+              key={index}
+              className={cn(
+                'w-7 h-10 rounded border border-slate-500',
+                'bg-gradient-to-br from-indigo-900 via-blue-800 to-indigo-900',
+                'shadow-md'
+              )}
+              style={{
+                marginLeft: index === 0 ? 0 : '-18px',
+                zIndex: index,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {isFinished && (
+        <div className="text-emerald-400 text-xs">Finished</div>
+      )}
     </div>
   )
 }

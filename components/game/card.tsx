@@ -29,25 +29,31 @@ export function PlayingCard({
   highlighted = false,
   onClick,
 }: CardProps) {
-  const sizeClasses = {
-    sm: 'w-12 h-16 text-sm',
-    md: 'w-16 h-22 text-lg',
-    lg: 'w-20 h-28 text-xl',
+  const sizeConfig = {
+    sm: { card: 'w-10 h-14', rank: 'text-xs', suit: 'text-base', padding: 'p-0.5' },
+    md: { card: 'w-14 h-20', rank: 'text-sm', suit: 'text-xl', padding: 'p-1' },
+    lg: { card: 'w-18 h-26', rank: 'text-base', suit: 'text-2xl', padding: 'p-1.5' },
   }
 
+  const config = sizeConfig[size]
   const color = getSuitColor(card.suit)
 
   if (faceDown) {
     return (
       <div
         className={cn(
-          sizeClasses[size],
-          'rounded-lg border-2 border-slate-600 bg-gradient-to-br from-blue-900 to-blue-700',
+          config.card,
+          'rounded-lg border border-slate-500',
+          'bg-gradient-to-br from-indigo-900 via-blue-800 to-indigo-900',
           'flex items-center justify-center',
-          'shadow-md'
+          'shadow-lg',
+          'relative overflow-hidden'
         )}
       >
-        <div className="text-2xl text-blue-300/50">?</div>
+        {/* Card back pattern */}
+        <div className="absolute inset-1 rounded border border-blue-400/30 bg-[radial-gradient(circle_at_center,_transparent_0%,_rgba(59,130,246,0.1)_50%,_transparent_100%)]" />
+        <div className="absolute inset-2 rounded border border-blue-300/20" />
+        <div className="text-blue-400/40 text-lg font-serif">R</div>
       </div>
     )
   }
@@ -58,20 +64,45 @@ export function PlayingCard({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        sizeClasses[size],
-        'rounded-lg border-2 bg-white',
-        'flex flex-col items-center justify-between p-1',
-        'shadow-md transition-all duration-150',
-        selected && 'ring-2 ring-yellow-400 -translate-y-3 border-yellow-400 shadow-yellow-400/50 shadow-lg',
-        !disabled && !selected && 'hover:-translate-y-1 hover:shadow-lg cursor-pointer',
-        disabled && 'cursor-default',  // No opacity change - cards stay visible
-        highlighted && !selected && 'shadow-emerald-400/30 shadow-lg',  // Subtle glow when it's your turn
-        color === 'red' ? 'text-red-600' : 'text-slate-900'
+        config.card,
+        config.padding,
+        'rounded-lg border bg-gradient-to-br from-white to-slate-50',
+        'flex flex-col justify-between',
+        'shadow-lg transition-all duration-150',
+        'relative overflow-hidden',
+        // Default border
+        !selected && 'border-slate-300',
+        // Selected state
+        selected && 'ring-2 ring-yellow-400 -translate-y-4 border-yellow-400 shadow-yellow-400/50 shadow-xl scale-105',
+        // Hover state (when not disabled and not selected)
+        !disabled && !selected && 'hover:-translate-y-2 hover:shadow-xl hover:border-slate-400 cursor-pointer',
+        // Disabled state
+        disabled && 'cursor-default',
+        // Highlighted state (your turn)
+        highlighted && !selected && 'shadow-emerald-400/40 shadow-xl border-emerald-400/50',
+        // Text color based on suit
+        color === 'red' ? 'text-red-500' : 'text-slate-800'
       )}
     >
-      <div className="self-start font-bold leading-none">{card.rank}</div>
-      <div className="text-2xl">{suitSymbols[card.suit]}</div>
-      <div className="self-end font-bold leading-none rotate-180">{card.rank}</div>
+      {/* Top-left corner */}
+      <div className="flex flex-col items-center self-start leading-none">
+        <span className={cn(config.rank, 'font-bold')}>{card.rank}</span>
+        <span className={cn(config.rank)}>{suitSymbols[card.suit]}</span>
+      </div>
+
+      {/* Center suit */}
+      <div className={cn(config.suit, 'self-center -my-1')}>
+        {suitSymbols[card.suit]}
+      </div>
+
+      {/* Bottom-right corner (rotated) */}
+      <div className="flex flex-col items-center self-end leading-none rotate-180">
+        <span className={cn(config.rank, 'font-bold')}>{card.rank}</span>
+        <span className={cn(config.rank)}>{suitSymbols[card.suit]}</span>
+      </div>
+
+      {/* Subtle inner shadow for depth */}
+      <div className="absolute inset-0 rounded-lg shadow-inner pointer-events-none" />
     </button>
   )
 }
@@ -82,9 +113,16 @@ interface CardStackProps {
 }
 
 export function CardStack({ cards, size = 'md' }: CardStackProps) {
+  const sizeWidths = { sm: 40, md: 56, lg: 72 }
+  const sizeHeights = { sm: 56, md: 80, lg: 104 }
+  const overlap = size === 'sm' ? 15 : size === 'md' ? 18 : 22
+
   if (cards.length === 0) {
     return (
-      <div className="w-20 h-28 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500">
+      <div
+        className="rounded-lg border-2 border-dashed border-slate-600/50 flex items-center justify-center text-slate-500 text-sm"
+        style={{ width: sizeWidths[size], height: sizeHeights[size] }}
+      >
         Empty
       </div>
     )
@@ -97,7 +135,7 @@ export function CardStack({ cards, size = 'md' }: CardStackProps) {
           key={card.id}
           className="absolute"
           style={{
-            left: `${index * 20}px`,
+            left: `${index * overlap}px`,
             zIndex: index,
           }}
         >
@@ -106,7 +144,10 @@ export function CardStack({ cards, size = 'md' }: CardStackProps) {
       ))}
       <div
         className="invisible"
-        style={{ width: `${64 + (cards.length - 1) * 20}px`, height: '88px' }}
+        style={{
+          width: `${sizeWidths[size] + (cards.length - 1) * overlap}px`,
+          height: `${sizeHeights[size]}px`
+        }}
       />
     </div>
   )

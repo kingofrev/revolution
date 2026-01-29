@@ -24,8 +24,23 @@ const rankEmojis: Record<string, string> = {
   PEASANT: '🧑‍🌾',
 }
 
+// Rank order for sorting (lower = higher rank)
+const rankOrder: Record<string, number> = {
+  KING: 0,
+  QUEEN: 1,
+  NOBLE: 2,
+  PEASANT: 3,
+}
+
 export function Scoreboard({ players, winScore, currentRound }: ScoreboardProps) {
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score)
+  // Sort by rank (King first), then by score for players with same rank
+  const sortedPlayers = [...players].sort((a, b) => {
+    const rankA = a.rank ? rankOrder[a.rank] ?? 99 : 99
+    const rankB = b.rank ? rankOrder[b.rank] ?? 99 : 99
+    if (rankA !== rankB) return rankA - rankB
+    // Same rank or no rank - sort by score
+    return b.score - a.score
+  })
 
   return (
     <div className="bg-slate-800/80 rounded-lg p-4 min-w-[200px]">
