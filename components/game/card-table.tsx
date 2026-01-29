@@ -173,13 +173,13 @@ function PlayerPlate({
 
 export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
   // Get fixed positions for all players based on player count
-  // 1st player always at top, then counter-clockwise (left, bottom, right)
+  // 1st player always at top, then clockwise (right, bottom, left)
   const getPositions = (count: number): string[] => {
-    if (count === 4) return ['top', 'left', 'bottom', 'right']
-    if (count === 5) return ['top', 'top-left', 'left', 'bottom', 'right']
-    if (count === 6) return ['top', 'top-left', 'left', 'bottom', 'right', 'top-right']
+    if (count === 4) return ['top', 'right', 'bottom', 'left']
+    if (count === 5) return ['top', 'top-right', 'right', 'bottom', 'left']
+    if (count === 6) return ['top', 'top-right', 'right', 'bottom', 'left', 'top-left']
     // Fallback for smaller games
-    if (count === 3) return ['top', 'left', 'right']
+    if (count === 3) return ['top', 'right', 'left']
     if (count === 2) return ['top', 'bottom']
     return ['top']
   }
