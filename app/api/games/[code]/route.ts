@@ -19,7 +19,7 @@ export async function GET(
       where: { code: code.toUpperCase() },
       include: {
         players: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, isBot: true } } },
           orderBy: { seatPosition: 'asc' },
         },
         host: { select: { id: true, name: true } },
@@ -57,7 +57,7 @@ export async function POST(
       where: { code: code.toUpperCase() },
       include: {
         players: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, isBot: true } } },
         },
         host: { select: { id: true, name: true } },
       },
@@ -98,7 +98,7 @@ export async function POST(
       where: { id: game.id },
       include: {
         players: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, isBot: true } } },
           orderBy: { seatPosition: 'asc' },
         },
         host: { select: { id: true, name: true } },
@@ -152,7 +152,7 @@ export async function PATCH(
       },
       include: {
         players: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, isBot: true } } },
           orderBy: { seatPosition: 'asc' },
         },
         host: { select: { id: true, name: true } },

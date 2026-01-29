@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createDeck, shuffleDeck, dealCards, dealCardsWithExtras, sortHand, getHighestSuitInSet, getRunHighCard, getCardValue, getBombHighRank } from '@/lib/game/deck'
 import { validatePlay, getPlayType, getBestCards, getWorstCards } from '@/lib/game/rules'
+import { getBotPlay, getBotTradeCards } from '@/lib/game/bot'
 
 // Helper to load game state from database
 async function loadGameState(code: string) {
@@ -11,7 +12,7 @@ async function loadGameState(code: string) {
     where: { code },
     include: {
       players: {
-        include: { user: { select: { id: true, name: true } } },
+        include: { user: { select: { id: true, name: true, isBot: true } } },
         orderBy: { seatPosition: 'asc' },
       },
     },
@@ -31,6 +32,241 @@ async function saveGameState(code: string, state: any) {
     where: { code },
     data: { gameState: state },
   })
+}
+
+// Execute a bot's turn
+async function executeBotTurn(state: any, code: string): Promise<any> {
+  const currentPlayer = state.players.find((p: any) => p.id === state.currentPlayerId)
+  if (!currentPlayer || !currentPlayer.isBot || currentPlayer.isFinished) {
+    return state
+  }
+
+  const twosHigh = state.settings.twosHigh
+  const isLeading = !state.lastPlay
+
+  // Build bot game state
+  const botState = {
+    hand: currentPlayer.hand,
+    lastPlay: state.lastPlay,
+    twosHigh,
+    playedCards: [], // TODO: track played cards for card counting
+    opponents: state.players
+      .filter((p: any) => p.id !== currentPlayer.id)
+      .map((p: any) => ({
+        id: p.id,
+        cardCount: p.hand.length,
+        isFinished: p.isFinished,
+      })),
+    isLeading,
+  }
+
+  // Get bot's decision
+  const cardsToPlay = getBotPlay(botState)
+
+  if (cardsToPlay === null) {
+    // Bot passes
+    state.lastAction = {
+      type: 'pass',
+      playerId: currentPlayer.id,
+      playerName: currentPlayer.name,
+      playerRank: currentPlayer.currentRank,
+      description: 'passed',
+      autoSkipped: [],
+    }
+
+    state.passCount++
+    const activePlayers = state.players.filter((p: any) => !p.isFinished)
+
+    if (state.passCount >= activePlayers.length - 1) {
+      // Everyone passed, clear the pile
+      const lastPlayerId = state.lastPlay.playerId
+      const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
+      state.lastPlay = null
+      state.passCount = 0
+
+      if (lastPlayer && !lastPlayer.isFinished) {
+        state.currentPlayerId = lastPlayerId
+      } else {
+        state.currentPlayerId = getNextPlayer(state.players, lastPlayerId, state.turnOrder)
+      }
+    } else {
+      state.currentPlayerId = getNextPlayer(state.players, currentPlayer.id, state.turnOrder)
+    }
+  } else {
+    // Bot plays cards
+    const validation = validatePlay(cardsToPlay, state.lastPlay, twosHigh)
+    if (!validation.valid) {
+      // Bot made invalid play - just pass instead
+      console.error('Bot made invalid play:', validation.error)
+      state.currentPlayerId = getNextPlayer(state.players, currentPlayer.id, state.turnOrder)
+      await saveGameState(code, state)
+      return state
+    }
+
+    // Remove cards from hand
+    const cardIds = cardsToPlay.map((c: any) => c.id)
+    currentPlayer.hand = currentPlayer.hand.filter((c: any) => !cardIds.includes(c.id))
+
+    // Update last play
+    const playType = validation.playType!
+    state.lastPlay = {
+      playerId: currentPlayer.id,
+      cards: cardsToPlay,
+      rank: cardsToPlay[0].rank,
+      count: cardsToPlay.length,
+      playType,
+      highSuit: playType !== 'run' && playType !== 'bomb' ? getHighestSuitInSet(cardsToPlay) : undefined,
+      runHighCard: playType === 'run' ? getRunHighCard(cardsToPlay, twosHigh) : undefined,
+      bombHighRank: playType === 'bomb' ? getBombHighRank(cardsToPlay, twosHigh) : undefined,
+    }
+    state.passCount = 0
+
+    // Set last action
+    state.lastAction = {
+      type: 'play',
+      playerId: currentPlayer.id,
+      playerName: currentPlayer.name,
+      playerRank: currentPlayer.currentRank,
+      description: describePlay(cardsToPlay, playType, twosHigh),
+      autoSkipped: [],
+    }
+
+    // Check if bot finished
+    if (currentPlayer.hand.length === 0) {
+      currentPlayer.isFinished = true
+      currentPlayer.finishPosition = state.finishOrder.length
+      state.finishOrder.push(currentPlayer.id)
+
+      // Check if round is over
+      const activePlayers = state.players.filter((p: any) => !p.isFinished)
+      if (activePlayers.length <= 1) {
+        if (activePlayers.length === 1) {
+          const lastPlayer = activePlayers[0]
+          lastPlayer.isFinished = true
+          lastPlayer.finishPosition = state.finishOrder.length
+          state.finishOrder.push(lastPlayer.id)
+        }
+
+        // End round
+        const points = getPoints(state.settings.playerCount)
+        state.players.forEach((p: any) => {
+          const pos = state.finishOrder.indexOf(p.id)
+          if (pos >= 0) {
+            p.totalScore += points[pos]
+            p.currentRank = getRank(pos, state.settings.playerCount)
+          }
+        })
+
+        const winner = state.players.find((p: any) => p.totalScore >= state.settings.winScore)
+        state.status = winner ? 'GAME_OVER' : 'ROUND_END'
+        state.currentPlayerId = null
+
+        await saveGameState(code, state)
+        return state
+      }
+    }
+
+    // Next player
+    const requiredCards = state.lastPlay?.count || 1
+    const { nextPlayerId, skipped } = getNextValidPlayer(
+      state.players,
+      currentPlayer.id,
+      state.turnOrder,
+      requiredCards
+    )
+    state.currentPlayerId = nextPlayerId
+
+    if (skipped.length > 0 && state.lastAction) {
+      state.lastAction.autoSkipped = skipped.map((p: any) => ({
+        playerId: p.id,
+        playerName: p.name,
+        playerRank: p.currentRank,
+      }))
+    }
+  }
+
+  await saveGameState(code, state)
+
+  // If next player is also a bot, recursively play (with limit to prevent infinite loops)
+  const nextPlayer = state.players.find((p: any) => p.id === state.currentPlayerId)
+  if (nextPlayer?.isBot && !nextPlayer.isFinished && state.status === 'PLAYING') {
+    // Add small delay to prevent overwhelming
+    return executeBotTurn(state, code)
+  }
+
+  return state
+}
+
+// Execute bot trades during trading phase
+async function executeBotTrades(state: any, code: string): Promise<any> {
+  const { kingId, queenId, lowestPeasantId, secondLowestId, kingTraded, queenTraded } = state.tradingState
+  const twosHigh = state.settings.twosHigh
+
+  // Check if King is a bot and hasn't traded
+  if (!kingTraded) {
+    const king = state.players.find((p: any) => p.id === kingId)
+    if (king?.isBot) {
+      const cardsToGive = getBotTradeCards(king.hand, 2, twosHigh)
+      const lowestPeasant = state.players.find((p: any) => p.id === lowestPeasantId)
+
+      if (lowestPeasant) {
+        // Get best cards from peasant
+        const peasantBest = getBestCards(lowestPeasant.hand, 2, twosHigh)
+
+        // Perform trade
+        king.hand = king.hand.filter((c: any) => !cardsToGive.some((g: any) => g.id === c.id))
+        lowestPeasant.hand = lowestPeasant.hand.filter((c: any) => !peasantBest.some((b: any) => b.id === c.id))
+
+        king.hand.push(...peasantBest)
+        lowestPeasant.hand.push(...cardsToGive)
+
+        king.hand = sortHand(king.hand, twosHigh)
+        lowestPeasant.hand = sortHand(lowestPeasant.hand, twosHigh)
+
+        state.tradingState.kingTraded = true
+      }
+    }
+  }
+
+  // Check if Queen is a bot and hasn't traded
+  if (!queenTraded) {
+    const queen = state.players.find((p: any) => p.id === queenId)
+    if (queen?.isBot) {
+      const cardsToGive = getBotTradeCards(queen.hand, 1, twosHigh)
+      const secondLowest = state.players.find((p: any) => p.id === secondLowestId)
+
+      if (secondLowest && queenId !== secondLowestId) {
+        // Get best card from peasant
+        const peasantBest = getBestCards(secondLowest.hand, 1, twosHigh)
+
+        // Perform trade
+        queen.hand = queen.hand.filter((c: any) => !cardsToGive.some((g: any) => g.id === c.id))
+        secondLowest.hand = secondLowest.hand.filter((c: any) => !peasantBest.some((b: any) => b.id === c.id))
+
+        queen.hand.push(...peasantBest)
+        secondLowest.hand.push(...cardsToGive)
+
+        queen.hand = sortHand(queen.hand, twosHigh)
+        secondLowest.hand = sortHand(secondLowest.hand, twosHigh)
+
+        state.tradingState.queenTraded = true
+      }
+    }
+  }
+
+  // Check if all trades are complete
+  if (state.tradingState.kingTraded && state.tradingState.queenTraded) {
+    const { prevFinishOrder } = state.tradingState
+    const startingPlayer = state.players.find((p: any) => p.id === kingId) || state.players[0]
+    state.status = 'PLAYING'
+    state.currentPlayerId = startingPlayer.id
+    state.finishOrder = []
+    state.turnOrder = prevFinishOrder
+    state.tradingState = null
+  }
+
+  await saveGameState(code, state)
+  return state
 }
 
 export async function GET(
@@ -79,6 +315,7 @@ export async function GET(
         id: p.id,
         odlerId: p.userId,
         name: p.user.name,
+        isBot: p.user.isBot || false,
         seatPosition: p.seatPosition,
         hand: sortHand(hands[index], game.twosHigh),
         totalScore: p.totalScore,
@@ -123,6 +360,19 @@ export async function GET(
 
     if (!currentState) {
       return NextResponse.json({ error: 'Game state not found' }, { status: 404 })
+    }
+
+    // Bot auto-play: If it's a bot's turn, make them play
+    if (currentState.status === 'PLAYING' && currentState.currentPlayerId) {
+      const currentPlayer = currentState.players.find((p: any) => p.id === currentState.currentPlayerId)
+      if (currentPlayer?.isBot && !currentPlayer.isFinished) {
+        currentState = await executeBotTurn(currentState, upperCode)
+      }
+    }
+
+    // Bot auto-trade: If in trading phase and a bot needs to trade
+    if (currentState.status === 'TRADING' && currentState.tradingState) {
+      currentState = await executeBotTrades(currentState, upperCode)
     }
 
     // Return state with only this player's hand visible

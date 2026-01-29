@@ -18,7 +18,7 @@ interface Game {
   winScore: number
   players: {
     id: string
-    user: { id: string; name: string }
+    user: { id: string; name: string; isBot?: boolean }
     seatPosition: number
   }[]
   host: { id: string; name: string }
@@ -128,6 +128,48 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
     }
   }
 
+  async function handleAddBot() {
+    try {
+      const res = await fetch(`/api/games/${resolvedParams.code}/bots`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to add bot')
+        return
+      }
+      // Refresh game data
+      const gameRes = await fetch(`/api/games/${resolvedParams.code}`)
+      if (gameRes.ok) {
+        setGame(await gameRes.json())
+      }
+    } catch {
+      setError('Failed to add bot')
+    }
+  }
+
+  async function handleRemoveBot(odlerId: string) {
+    try {
+      const res = await fetch(`/api/games/${resolvedParams.code}/bots`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ odlerId }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to remove bot')
+        return
+      }
+      // Refresh game data
+      const gameRes = await fetch(`/api/games/${resolvedParams.code}`)
+      if (gameRes.ok) {
+        setGame(await gameRes.json())
+      }
+    } catch {
+      setError('Failed to remove bot')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-slate-900 p-4">
       <div className="max-w-2xl mx-auto">
@@ -181,31 +223,66 @@ export default function LobbyPage({ params }: { params: Promise<{ code: string }
 
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle>
-              Players ({game.players.length}/{game.playerCount})
-            </CardTitle>
+            <div className="flex justify-between items-center">
+              <CardTitle>
+                Players ({game.players.length}/{game.playerCount})
+              </CardTitle>
+              {isHost && game.players.length < game.playerCount && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddBot}
+                  className="text-xs"
+                >
+                  + Add Bot
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {game.players.map((player) => (
                 <div
                   key={player.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    player.user.isBot ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-muted/50'
+                  }`}
                 >
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-                      {player.user.name.charAt(0).toUpperCase()}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                      player.user.isBot
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-primary/20 text-primary'
+                    }`}>
+                      {player.user.isBot ? '🤖' : player.user.name.charAt(0).toUpperCase()}
                     </div>
                     <span className="font-medium">{player.user.name}</span>
+                    {player.user.isBot && (
+                      <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
+                        Bot
+                      </span>
+                    )}
                     {player.user.id === game.hostId && (
                       <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
                         Host
                       </span>
                     )}
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    Seat {player.seatPosition + 1}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">
+                      Seat {player.seatPosition + 1}
+                    </span>
+                    {isHost && player.user.isBot && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveBot(player.user.id)}
+                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
               {Array.from({ length: game.playerCount - game.players.length }).map((_, i) => (
