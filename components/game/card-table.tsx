@@ -1,0 +1,296 @@
+'use client'
+
+import { cn } from '@/lib/utils'
+import { Card } from '@/lib/game/deck'
+import { PlayedCards } from '@/lib/game/rules'
+import { CardStack } from './card'
+
+interface Player {
+  id: string
+  name: string
+  odlerId: string
+  handCount: number
+  currentRank: string | null
+  isFinished: boolean
+  isCurrentTurn: boolean
+}
+
+interface CardTableProps {
+  players: Player[]           // All players sorted by rank (King first)
+  myPlayerId: string          // Current user's player ID
+  lastPlay: PlayedCards | null
+  lastAction?: {
+    type: 'play' | 'pass'
+    playerId: string
+    playerName: string
+    playerRank: string | null
+    description: string
+    autoSkipped: { playerId: string; playerName: string; playerRank: string | null }[]
+  } | null
+}
+
+const rankEmojis: Record<string, string> = {
+  KING: '👑',
+  QUEEN: '👸',
+  NOBLE: '🎩',
+  PEASANT: '🧑‍🌾',
+}
+
+const rankColors: Record<string, string> = {
+  KING: 'from-yellow-600 to-yellow-800',
+  QUEEN: 'from-purple-600 to-purple-800',
+  NOBLE: 'from-blue-600 to-blue-800',
+  PEASANT: 'from-slate-600 to-slate-800',
+}
+
+function getPlayDescription(play: PlayedCards): string {
+  const playType = play.playType
+
+  if (playType === 'bomb') {
+    const ranks = [...new Set(play.cards.map(c => c.rank))].sort()
+    return `BOMB! (${ranks.join('-')})`
+  }
+
+  if (playType === 'run') {
+    const ranks = play.cards.map(c => c.rank)
+    return `Run: ${ranks.join('-')}`
+  }
+
+  const typeNames: Record<string, string> = {
+    'single': '',
+    'pair': 'Pair of',
+    'triple': 'Triple',
+    'quad': 'Quad',
+  }
+
+  const prefix = playType ? typeNames[playType] || '' : ''
+  if (prefix) {
+    return `${prefix} ${play.rank}s`
+  }
+
+  if (play.count === 1) return `${play.rank}`
+  if (play.count === 2) return `Pair of ${play.rank}s`
+  if (play.count === 3) return `Triple ${play.rank}s`
+  if (play.count === 4) return `Quad ${play.rank}s`
+  return `${play.count} cards`
+}
+
+// Face-down cards display for a player position
+function FaceDownCards({
+  count,
+  position,
+  isCurrentTurn
+}: {
+  count: number
+  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right'
+  isCurrentTurn: boolean
+}) {
+  const cards = Array.from({ length: Math.min(count, 13) })
+
+  // Rotation based on position (cards face toward center)
+  const rotations: Record<string, string> = {
+    'top': 'rotate-180',
+    'right': '-rotate-90',
+    'bottom': 'rotate-0',
+    'left': 'rotate-90',
+    'top-left': 'rotate-[135deg]',
+    'top-right': 'rotate-[-135deg]',
+  }
+
+  // Card overlap direction
+  const isVertical = position === 'left' || position === 'right'
+
+  if (count === 0) {
+    return <div className="text-slate-500 text-sm">Finished</div>
+  }
+
+  return (
+    <div className={cn(
+      "flex items-center justify-center",
+      isVertical ? "flex-col" : "flex-row",
+      isCurrentTurn && "scale-110"
+    )}>
+      {cards.map((_, index) => (
+        <div
+          key={index}
+          className={cn(
+            'w-8 h-11 rounded-md border border-slate-400/50',
+            'bg-gradient-to-br from-indigo-800 via-blue-700 to-indigo-900',
+            'shadow-md',
+            rotations[position],
+            isCurrentTurn && 'ring-2 ring-yellow-400'
+          )}
+          style={{
+            marginLeft: !isVertical && index > 0 ? '-20px' : 0,
+            marginTop: isVertical && index > 0 ? '-28px' : 0,
+            zIndex: index,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// Player name plate
+function PlayerPlate({
+  player,
+  position
+}: {
+  player: Player
+  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right'
+}) {
+  const rankGradient = player.currentRank ? rankColors[player.currentRank] : 'from-slate-600 to-slate-800'
+
+  return (
+    <div className={cn(
+      'flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r shadow-lg',
+      rankGradient,
+      player.isCurrentTurn && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900'
+    )}>
+      {player.currentRank && (
+        <span className="text-sm">{rankEmojis[player.currentRank]}</span>
+      )}
+      <span className={cn(
+        'text-sm font-medium text-white',
+        player.isCurrentTurn && 'text-yellow-200'
+      )}>
+        {player.name}
+      </span>
+      {!player.isFinished && (
+        <span className="text-xs bg-black/30 px-1.5 py-0.5 rounded text-white/80">
+          {player.handCount}
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function CardTable({ players, myPlayerId, lastPlay, lastAction }: CardTableProps) {
+  // Filter out the current player for positioning around the table
+  const otherPlayers = players.filter(p => p.id !== myPlayerId)
+  const playerCount = players.length
+
+  // Get positions for other players (clockwise from top, starting with King)
+  // 3 others: top, right, left
+  // 4 others: top, right, left, and one more
+  // 5 others: spread around
+  const getPositions = () => {
+    const count = otherPlayers.length
+    if (count === 1) return ['top']
+    if (count === 2) return ['top', 'right']
+    if (count === 3) return ['top', 'right', 'left']
+    if (count === 4) return ['top-left', 'top-right', 'right', 'left']
+    return ['top-left', 'top', 'top-right', 'right', 'left']
+  }
+
+  const positions = getPositions()
+
+  // Position styles for each spot around the table
+  const positionStyles: Record<string, string> = {
+    'top': 'top-4 left-1/2 -translate-x-1/2 flex-col',
+    'top-left': 'top-8 left-8 flex-col items-start',
+    'top-right': 'top-8 right-8 flex-col items-end',
+    'right': 'right-4 top-1/2 -translate-y-1/2 flex-row-reverse items-center',
+    'left': 'left-4 top-1/2 -translate-y-1/2 flex-row items-center',
+    'bottom': 'bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse',
+  }
+
+  return (
+    <div className="relative w-full max-w-4xl mx-auto aspect-[16/10]">
+      {/* Table surface */}
+      <div className="absolute inset-0">
+        {/* Outer wooden rail */}
+        <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950 shadow-2xl" />
+
+        {/* Inner wooden edge */}
+        <div className="absolute inset-3 rounded-[2.5rem] bg-gradient-to-b from-amber-600 via-amber-700 to-amber-900" />
+
+        {/* Padding/cushion rail */}
+        <div className="absolute inset-5 rounded-[2rem] bg-gradient-to-b from-amber-900 to-amber-950" />
+
+        {/* Green felt surface */}
+        <div className="absolute inset-7 rounded-[1.5rem] bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 shadow-inner overflow-hidden">
+          {/* Felt texture */}
+          <div
+            className="absolute inset-0 opacity-20"
+            style={{
+              backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(0,0,0,0.3) 1px, transparent 0)',
+              backgroundSize: '4px 4px'
+            }}
+          />
+          {/* Center lighting effect */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.1)_0%,_transparent_60%)]" />
+        </div>
+      </div>
+
+      {/* Players around the table */}
+      {otherPlayers.map((player, index) => {
+        const position = positions[index] || 'top'
+        return (
+          <div
+            key={player.id}
+            className={cn(
+              'absolute flex gap-2 z-10',
+              positionStyles[position]
+            )}
+          >
+            <PlayerPlate player={player} position={position as any} />
+            <FaceDownCards
+              count={player.handCount}
+              position={position as any}
+              isCurrentTurn={player.isCurrentTurn}
+            />
+          </div>
+        )
+      })}
+
+      {/* Center play area */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+        {/* Action caption */}
+        {lastAction && (
+          <div className="mb-2 text-center">
+            <div className="bg-black/40 backdrop-blur-sm rounded-lg px-4 py-2 inline-block">
+              <span className="text-white text-sm">
+                {lastAction.playerRank && (
+                  <span className="text-yellow-400">
+                    {rankEmojis[lastAction.playerRank]}{' '}
+                  </span>
+                )}
+                <span className="font-medium">{lastAction.playerName}</span>
+                {lastAction.type === 'play' ? (
+                  <span className="text-emerald-400"> played {lastAction.description}</span>
+                ) : (
+                  <span className="text-slate-300"> passed</span>
+                )}
+              </span>
+            </div>
+            {lastAction.autoSkipped && lastAction.autoSkipped.length > 0 && (
+              <div className="mt-1">
+                {lastAction.autoSkipped.map((skipped) => (
+                  <div key={skipped.playerId} className="text-xs text-orange-400">
+                    {skipped.playerRank && rankEmojis[skipped.playerRank]}{' '}
+                    {skipped.playerName} auto-passed
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Cards in play */}
+        {lastPlay ? (
+          <div className="flex flex-col items-center gap-2">
+            <CardStack cards={lastPlay.cards} size="md" />
+            <div className="text-sm font-medium text-emerald-100 bg-black/30 px-3 py-1 rounded-full">
+              {getPlayDescription(lastPlay)}
+            </div>
+          </div>
+        ) : (
+          <div className="text-emerald-200/50 text-center">
+            <div className="text-lg font-medium">Lead any cards</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

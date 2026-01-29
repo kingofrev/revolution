@@ -5,8 +5,9 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/lib/game/deck'
 import { validatePlay } from '@/lib/game/rules'
-import { Hand, OpponentHand, SortOrder } from '@/components/game/hand'
-import { PlayArea, ActionButtons, BurnedCards } from '@/components/game/play-area'
+import { Hand, SortOrder } from '@/components/game/hand'
+import { ActionButtons, BurnedCards } from '@/components/game/play-area'
+import { CardTable } from '@/components/game/card-table'
 import { Scoreboard, RoundResults, GameOver } from '@/components/game/scoreboard'
 import { Chat } from '@/components/game/chat'
 import { TradingPhase } from '@/components/game/trading'
@@ -314,29 +315,6 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       return a.seatPosition - b.seatPosition
     })
 
-  // Arrange players around the table:
-  // - King (or highest rank) at top center
-  // - Others distributed around
-  const getTablePositions = () => {
-    const count = otherPlayers.length
-    // For different player counts, assign positions
-    // Positions: top (can have 1-2), left, right
-    if (count <= 1) {
-      return { top: otherPlayers.slice(0, 1), left: [], right: [] }
-    } else if (count === 2) {
-      return { top: [otherPlayers[0]], left: [otherPlayers[1]], right: [] }
-    } else if (count === 3) {
-      return { top: [otherPlayers[0]], left: [otherPlayers[1]], right: [otherPlayers[2]] }
-    } else if (count === 4) {
-      return { top: otherPlayers.slice(0, 2), left: [otherPlayers[2]], right: [otherPlayers[3]] }
-    } else {
-      // 5 other players
-      return { top: otherPlayers.slice(0, 2), left: [otherPlayers[2]], right: [otherPlayers[3], otherPlayers[4]] }
-    }
-  }
-
-  const tablePositions = getTablePositions()
-
   const isMyTurn = myPlayer?.id === gameState.currentPlayerId
 
   const canPlayCards =
@@ -434,99 +412,22 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         />
       </div>
 
-      <div className="flex-1 flex flex-col justify-center">
-        {/* Top position - King (or highest rank) */}
-        <div className="flex justify-center mb-4">
-          {tablePositions.top.map((player) => (
-            <div key={player.id} className="mx-4">
-              <OpponentHand
-                cardCount={player.handCount || 0}
-                position="top"
-                playerName={player.name}
-                isCurrentTurn={player.id === gameState.currentPlayerId}
-                isFinished={player.isFinished}
-                rank={player.currentRank}
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="flex justify-between items-center">
-          {/* Left position */}
-          <div className="w-48">
-            {tablePositions.left.map((player) => (
-              <div key={player.id} className="mb-2">
-                <OpponentHand
-                  cardCount={player.handCount || 0}
-                  position="left"
-                  playerName={player.name}
-                  isCurrentTurn={player.id === gameState.currentPlayerId}
-                  isFinished={player.isFinished}
-                  rank={player.currentRank}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="flex-1 max-w-md mx-4 flex flex-col items-center">
-            {/* Action Caption */}
-            {gameState.lastAction && (
-              <div className="mb-3 text-center">
-                <div className="bg-slate-800/80 rounded-lg px-4 py-2 inline-block">
-                  <span className="text-white">
-                    {gameState.lastAction.playerRank && (
-                      <span className="text-yellow-400">
-                        {gameState.lastAction.playerRank === 'KING' ? '👑 ' :
-                         gameState.lastAction.playerRank === 'QUEEN' ? '👸 ' :
-                         gameState.lastAction.playerRank === 'NOBLE' ? '🎩 ' : '🧑‍🌾 '}
-                      </span>
-                    )}
-                    <span className="font-medium">{gameState.lastAction.playerName}</span>
-                    {gameState.lastAction.type === 'play' ? (
-                      <span className="text-emerald-400"> played {gameState.lastAction.description}</span>
-                    ) : (
-                      <span className="text-slate-400"> passed</span>
-                    )}
-                  </span>
-                </div>
-                {/* Auto-skipped players */}
-                {gameState.lastAction.autoSkipped && gameState.lastAction.autoSkipped.length > 0 && (
-                  <div className="mt-1">
-                    {gameState.lastAction.autoSkipped.map((skipped) => (
-                      <div key={skipped.playerId} className="text-sm text-orange-400">
-                        {skipped.playerRank && (
-                          <span>
-                            {skipped.playerRank === 'KING' ? '👑 ' :
-                             skipped.playerRank === 'QUEEN' ? '👸 ' :
-                             skipped.playerRank === 'NOBLE' ? '🎩 ' : '🧑‍🌾 '}
-                          </span>
-                        )}
-                        {skipped.playerName} was auto-passed (not enough cards)
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <PlayArea lastPlay={gameState.lastPlay} />
-          </div>
-
-          {/* Right position */}
-          <div className="w-48">
-            {tablePositions.right.map((player) => (
-              <div key={player.id} className="mb-2">
-                <OpponentHand
-                  cardCount={player.handCount || 0}
-                  position="right"
-                  playerName={player.name}
-                  isCurrentTurn={player.id === gameState.currentPlayerId}
-                  isFinished={player.isFinished}
-                  rank={player.currentRank}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Card Table with all players */}
+      <div className="flex-1 flex items-center justify-center py-4">
+        <CardTable
+          players={otherPlayers.map((p) => ({
+            id: p.id,
+            name: p.name,
+            odlerId: p.odlerId,
+            handCount: p.handCount || 0,
+            currentRank: p.currentRank,
+            isFinished: p.isFinished,
+            isCurrentTurn: p.id === gameState.currentPlayerId,
+          }))}
+          myPlayerId={myPlayer?.id || ''}
+          lastPlay={gameState.lastPlay}
+          lastAction={gameState.lastAction}
+        />
       </div>
 
       <div className={`mt-auto transition-all duration-300 ${isMyTurn ? 'pb-2' : ''}`}>
