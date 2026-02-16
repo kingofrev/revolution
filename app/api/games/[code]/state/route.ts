@@ -185,15 +185,13 @@ async function executeBotTurn(state: any, code: string): Promise<any> {
     }
   }
 
-  await saveGameState(code, state)
-
-  // If next player is also a bot, recursively play (with limit to prevent infinite loops)
+  // If next player is also a bot, set timestamp for their turn (don't play immediately)
   const nextPlayer = state.players.find((p: any) => p.id === state.currentPlayerId)
   if (nextPlayer?.isBot && !nextPlayer.isFinished && state.status === 'PLAYING') {
-    // Add small delay to prevent overwhelming
-    return executeBotTurn(state, code)
+    state.botTurnStartTime = Date.now()
   }
 
+  await saveGameState(code, state)
   return state
 }
 
@@ -263,6 +261,11 @@ async function executeBotTrades(state: any, code: string): Promise<any> {
     state.finishOrder = []
     state.turnOrder = prevFinishOrder
     state.tradingState = null
+
+    // If starting player is a bot, set timestamp for delay
+    if (startingPlayer?.isBot) {
+      state.botTurnStartTime = Date.now()
+    }
   }
 
   await saveGameState(code, state)
@@ -354,6 +357,11 @@ export async function GET(
         burnedCards, // Show burned cards for round 1 (5 or 6 players)
       }
 
+      // If starting player is a bot, set timestamp for delay
+      if (startingPlayer?.isBot) {
+        currentState.botTurnStartTime = Date.now()
+      }
+
       // Save to database
       await saveGameState(upperCode, currentState)
     }
@@ -362,17 +370,47 @@ export async function GET(
       return NextResponse.json({ error: 'Game state not found' }, { status: 404 })
     }
 
-    // Bot auto-play: If it's a bot's turn, make them play
+    // Bot auto-play: If it's a bot's turn, make them play (after 3 second delay)
     if (currentState.status === 'PLAYING' && currentState.currentPlayerId) {
       const currentPlayer = currentState.players.find((p: any) => p.id === currentState.currentPlayerId)
       if (currentPlayer?.isBot && !currentPlayer.isFinished) {
-        currentState = await executeBotTurn(currentState, upperCode)
+        // Check if bot turn just started (no timestamp yet)
+        if (!currentState.botTurnStartTime) {
+          currentState.botTurnStartTime = Date.now()
+          await saveGameState(upperCode, currentState)
+        } else {
+          // Check if 3 seconds have passed
+          const elapsed = Date.now() - currentState.botTurnStartTime
+          if (elapsed >= 3000) {
+            currentState.botTurnStartTime = null
+            currentState = await executeBotTurn(currentState, upperCode)
+          }
+        }
       }
     }
 
-    // Bot auto-trade: If in trading phase and a bot needs to trade
+    // Bot auto-trade: If in trading phase and a bot needs to trade (after 3 second delay)
     if (currentState.status === 'TRADING' && currentState.tradingState) {
-      currentState = await executeBotTrades(currentState, upperCode)
+      // Check if any bot needs to trade
+      const { kingId, queenId, kingTraded, queenTraded } = currentState.tradingState
+      const king = currentState.players.find((p: any) => p.id === kingId)
+      const queen = currentState.players.find((p: any) => p.id === queenId)
+      const botNeedsToTrade = (!kingTraded && king?.isBot) || (!queenTraded && queen?.isBot)
+
+      if (botNeedsToTrade) {
+        // Check if bot turn just started (no timestamp yet)
+        if (!currentState.botTurnStartTime) {
+          currentState.botTurnStartTime = Date.now()
+          await saveGameState(upperCode, currentState)
+        } else {
+          // Check if 3 seconds have passed
+          const elapsed = Date.now() - currentState.botTurnStartTime
+          if (elapsed >= 3000) {
+            currentState.botTurnStartTime = null
+            currentState = await executeBotTrades(currentState, upperCode)
+          }
+        }
+      }
     }
 
     // Return state with only this player's hand visible
@@ -540,6 +578,12 @@ export async function POST(
         }
       }
 
+      // If next player is a bot, set timestamp for delay
+      const nextPlayer = state.players.find((p: any) => p.id === state.currentPlayerId)
+      if (nextPlayer?.isBot && !nextPlayer.isFinished) {
+        state.botTurnStartTime = Date.now()
+      }
+
     } else if (action === 'next-round') {
       // Start next round
       if (state.status !== 'ROUND_END') {
@@ -599,6 +643,13 @@ export async function POST(
           prevFinishOrder,
         }
 
+        // If a bot needs to trade, set timestamp for delay
+        const king = state.players.find((p: any) => p.id === kingId)
+        const queen = state.players.find((p: any) => p.id === queenId)
+        if (king?.isBot || (queen?.isBot && queenId !== secondLowestId)) {
+          state.botTurnStartTime = Date.now()
+        }
+
         await saveGameState(upperCode, state)
         return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
       }
@@ -613,6 +664,11 @@ export async function POST(
       state.finishOrder = []
       state.turnOrder = prevFinishOrder // Turn order follows previous round's finish order
       state.tradingState = null
+
+      // If starting player is a bot, set timestamp for delay
+      if (startingPlayer?.isBot) {
+        state.botTurnStartTime = Date.now()
+      }
 
       await saveGameState(upperCode, state)
       return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
@@ -693,6 +749,11 @@ export async function POST(
         state.finishOrder = []
         state.turnOrder = prevFinishOrder // Turn order follows previous round's finish order
         state.tradingState = null
+
+        // If starting player is a bot, set timestamp for delay
+        if (startingPlayer?.isBot) {
+          state.botTurnStartTime = Date.now()
+        }
       }
 
       await saveGameState(upperCode, state)
@@ -732,6 +793,12 @@ export async function POST(
         }
       } else {
         state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
+      }
+
+      // If next player is a bot, set timestamp for delay
+      const nextPlayer = state.players.find((p: any) => p.id === state.currentPlayerId)
+      if (nextPlayer?.isBot && !nextPlayer.isFinished) {
+        state.botTurnStartTime = Date.now()
       }
 
     } else if (action === 'chat') {
