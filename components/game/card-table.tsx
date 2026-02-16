@@ -83,7 +83,7 @@ function FaceDownCards({
   isMe = false
 }: {
   count: number
-  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right'
+  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
   isCurrentTurn: boolean
   isMe?: boolean
 }) {
@@ -97,6 +97,8 @@ function FaceDownCards({
     'left': 'rotate-90',
     'top-left': 'rotate-[135deg]',
     'top-right': 'rotate-[-135deg]',
+    'bottom-left': 'rotate-[45deg]',
+    'bottom-right': 'rotate-[-45deg]',
   }
 
   // Card overlap direction
@@ -141,7 +143,7 @@ function PlayerPlate({
   position
 }: {
   player: Player
-  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right'
+  position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 }) {
   const rankGradient = player.currentRank ? rankColors[player.currentRank] : 'from-slate-600 to-slate-800'
 
@@ -173,11 +175,11 @@ function PlayerPlate({
 
 export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
   // Get fixed positions for all players based on player count
-  // 1st player always at top, then clockwise (right, bottom, left)
+  // Always clockwise from top: top → top-right → right/bottom-right → bottom/bottom-left → left/top-left
   const getPositions = (count: number): string[] => {
     if (count === 4) return ['top', 'right', 'bottom', 'left']
-    if (count === 5) return ['top', 'top-right', 'right', 'bottom', 'left']
-    if (count === 6) return ['top', 'top-right', 'right', 'bottom', 'left', 'top-left']
+    if (count === 5) return ['top', 'top-right', 'bottom-right', 'bottom-left', 'top-left']
+    if (count === 6) return ['top', 'top-right', 'right', 'bottom-right', 'bottom-left', 'top-left']
     // Fallback for smaller games
     if (count === 3) return ['top', 'right', 'left']
     if (count === 2) return ['top', 'bottom']
@@ -189,11 +191,13 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
   // Position styles for each spot around the table
   const positionStyles: Record<string, string> = {
     'top': 'top-4 left-1/2 -translate-x-1/2 flex-col',
-    'top-left': 'top-8 left-8 flex-col items-start',
-    'top-right': 'top-8 right-8 flex-col items-end',
+    'top-left': 'top-12 left-12 flex-col items-start',
+    'top-right': 'top-12 right-12 flex-col items-end',
     'right': 'right-4 top-1/2 -translate-y-1/2 flex-row-reverse items-center',
     'left': 'left-4 top-1/2 -translate-y-1/2 flex-row items-center',
     'bottom': 'bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse',
+    'bottom-left': 'bottom-12 left-12 flex-col-reverse items-start',
+    'bottom-right': 'bottom-12 right-12 flex-col-reverse items-end',
   }
 
   return (
