@@ -58,6 +58,7 @@ interface GameState {
   lastPlay: any
   passCount: number
   finishOrder: string[]
+  turnOrder: string[]
   myHand: Card[]
   messages?: ChatMessage[]
   tradingState?: TradingState | null
@@ -295,22 +296,19 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
   const myPlayer = gameState.players.find((p) => p.odlerId === session?.user?.id)
   const hand = gameState.myHand || []
 
-  // Rank order for sorting (King first)
-  const rankOrder: Record<string, number> = {
-    KING: 0,
-    QUEEN: 1,
-    NOBLE: 2,
-    PEASANT: 3,
-  }
-
   // Sort ALL players in turn order for the card table
-  // 1st player (King or seat 0 in round 1) at top, then counter-clockwise
+  // Clockwise from top: King (1st) → Queen (2nd) → Noble (3rd) → High Peasant (4th) → Low Peasant (5th)
   const allPlayersInTurnOrder = [...gameState.players]
     .sort((a, b) => {
-      const rankA = a.currentRank ? rankOrder[a.currentRank] ?? 99 : 99
-      const rankB = b.currentRank ? rankOrder[b.currentRank] ?? 99 : 99
-      if (rankA !== rankB) return rankA - rankB
-      // Same rank - maintain seat position order
+      // Use turn order if available (set at round start based on previous finish order)
+      if (gameState.turnOrder && gameState.turnOrder.length > 0) {
+        const posA = gameState.turnOrder.indexOf(a.id)
+        const posB = gameState.turnOrder.indexOf(b.id)
+        if (posA !== -1 && posB !== -1) {
+          return posA - posB
+        }
+      }
+      // Fallback: sort by seat position (for initial state)
       return a.seatPosition - b.seatPosition
     })
 
