@@ -11,6 +11,7 @@ import { CardTable } from '@/components/game/card-table'
 import { Scoreboard, RoundResults, GameOver } from '@/components/game/scoreboard'
 import { Chat } from '@/components/game/chat'
 import { TradingPhase } from '@/components/game/trading'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 interface ChatMessage {
   id: string
@@ -71,12 +72,14 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
   const resolvedParams = use(params)
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [selectedCards, setSelectedCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [sortOrder, setSortOrder] = useState<SortOrder>('low-high')
+  const [showScores, setShowScores] = useState(false)
 
   // Load sort preference from localStorage
   useEffect(() => {
@@ -463,6 +466,212 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
     return false
   })()
 
+  const scoreboardProps = {
+    players: gameState.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      score: p.totalScore,
+      rank: p.currentRank,
+      isFinished: p.isFinished,
+      isCurrentTurn: p.id === gameState.currentPlayerId,
+      turnOrderPosition: gameState.turnOrder?.indexOf(p.id) ?? 99,
+    })),
+    winScore: gameState.settings.winScore,
+    currentRound: gameState.currentRound,
+  }
+
+  const cardTableProps = {
+    players: allPlayersInTurnOrder.map((p, index) => ({
+      id: p.id,
+      name: p.name,
+      orderId: index,
+      handCount: p.handCount || 0,
+      currentRank: p.currentRank,
+      isFinished: p.isFinished,
+      isCurrentTurn: p.id === gameState.currentPlayerId,
+      isMe: p.odlerId === session?.user?.id,
+    })),
+    lastPlay: gameState.lastPlay,
+    lastAction: gameState.lastAction,
+  }
+
+  const sharedOverlays = (
+    <>
+      {gameState.status === 'ROUND_END' && (
+        <RoundResults
+          results={gameState.finishOrder.map((playerId, index) => {
+            const player = gameState.players.find((p) => p.id === playerId)!
+            const pointsMap: Record<number, number[]> = {
+              4: [4, 3, 2, 0],
+              5: [5, 4, 3, 2, 0],
+              6: [6, 5, 4, 3, 2, 0],
+            }
+            const points = (pointsMap[gameState.settings.playerCount] || [4, 3, 2, 0])[index]
+            return {
+              playerId,
+              name: player.name,
+              position: index,
+              points,
+              totalScore: player.totalScore,
+              rank: player.currentRank || 'PEASANT',
+            }
+          })}
+          isHost={session?.user?.id === gameState.players[0]?.odlerId}
+          onNextRound={handleNextRound}
+        />
+      )}
+
+      {gameState.status === 'TRADING' && gameState.tradingState && (
+        <TradingPhase
+          tradingState={gameState.tradingState}
+          myPlayerId={myPlayer?.id || ''}
+          myHand={hand}
+          players={gameState.players.map((p) => ({ id: p.id, name: p.name }))}
+          twosHigh={gameState.settings.twosHigh}
+          onTrade={handleTrade}
+          loading={actionLoading}
+        />
+      )}
+
+      {gameState.status === 'GAME_OVER' && (
+        <GameOver
+          winner={{
+            name: gameState.players.reduce((a, b) => (a.totalScore > b.totalScore ? a : b)).name,
+            score: Math.max(...gameState.players.map((p) => p.totalScore)),
+          }}
+          finalScores={gameState.players.map((p) => ({
+            playerId: p.id,
+            name: p.name,
+            score: p.totalScore,
+          }))}
+          onExit={() => router.push('/')}
+        />
+      )}
+
+      <Chat
+        messages={gameState.messages || []}
+        onSendMessage={handleSendMessage}
+        currentPlayerId={myPlayer?.id || ''}
+      />
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-slate-900 flex flex-col">
+        {error && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg z-50 text-sm">
+            {error}
+            <button onClick={() => setError(null)} className="ml-2 font-bold">×</button>
+          </div>
+        )}
+
+        {gameState.burnedCards && gameState.burnedCards.length > 0 &&
+          gameState.pendingBurnedCardsAck?.includes(session?.user?.id ?? '') && (
+          <BurnedCards cards={gameState.burnedCards} onAcknowledge={handleAcknowledgeBurnedCards} />
+        )}
+
+        {/* Top bar */}
+        <div className="flex justify-between items-center px-3 py-2 bg-slate-900/70 border-b border-slate-700 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+            <span className="text-sm text-white/70">{resolvedParams.code}</span>
+            <button
+              onClick={handleAbandonGame}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Leave
+            </button>
+          </div>
+          <button
+            onClick={() => setShowScores(true)}
+            className="text-sm bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-medium"
+          >
+            Scores
+          </button>
+        </div>
+
+        {/* Compact card table */}
+        <div className="px-2 py-1 shrink-0">
+          <CardTable {...cardTableProps} compact={true} />
+        </div>
+
+        {/* Sticky bottom panel */}
+        <div className="sticky bottom-0 mt-auto bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 p-3">
+          <div className="text-center mb-2">
+            <span className={`font-medium transition-all duration-300 ${isMyTurn ? 'text-yellow-300 text-base' : 'text-white text-sm'}`}>
+              {myPlayer?.name}
+            </span>
+            {myPlayer?.isFinished && (
+              <span className="ml-2 text-emerald-400 text-sm">({myPlayer.currentRank})</span>
+            )}
+            {isMyTurn && (
+              <span className="ml-2 text-yellow-400 animate-pulse font-bold text-sm">
+                ★ Your turn! ★
+              </span>
+            )}
+          </div>
+
+          {!myPlayer?.isFinished && (
+            <div className={`rounded-xl p-3 transition-all duration-300 ${
+              isMyTurn
+                ? 'bg-yellow-500/10 border-2 border-yellow-500/30 shadow-lg shadow-yellow-500/20'
+                : 'bg-slate-800/30'
+            }`}>
+              <Hand
+                cards={hand}
+                selectable={isMyTurn && !actionLoading}
+                onSelectionChange={setSelectedCards}
+                disabled={!isMyTurn || actionLoading}
+                twosHigh={gameState.settings.twosHigh}
+                isMyTurn={isMyTurn}
+                sortOrder={sortOrder}
+                onSortOrderChange={handleSortOrderChange}
+                showSortControls={false}
+              />
+
+              <ActionButtons
+                canPlay={canPlayCards && !actionLoading}
+                canPass={canPassTurn && !actionLoading}
+                selectedCount={selectedCards.length}
+                onPlay={handlePlay}
+                onPass={handlePass}
+                isMyTurn={isMyTurn}
+                mustPass={canPassTurn && !hasAnyValidPlay}
+              />
+            </div>
+          )}
+
+          {myPlayer?.isFinished && (
+            <div className="text-center text-emerald-400 py-4 text-sm">
+              You finished! Watching the rest of the round...
+            </div>
+          )}
+        </div>
+
+        {/* Scores overlay */}
+        {showScores && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-xl p-4 w-full max-w-sm">
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-white font-bold text-lg">Scores</h2>
+                <button
+                  onClick={() => setShowScores(false)}
+                  className="text-white/70 hover:text-white text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              <Scoreboard {...scoreboardProps} />
+            </div>
+          </div>
+        )}
+
+        {sharedOverlays}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-slate-900 p-4 flex flex-col">
       {error && (
@@ -490,37 +699,12 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             Leave Game
           </button>
         </div>
-        <Scoreboard
-          players={gameState.players.map((p) => ({
-            id: p.id,
-            name: p.name,
-            score: p.totalScore,
-            rank: p.currentRank,
-            isFinished: p.isFinished,
-            isCurrentTurn: p.id === gameState.currentPlayerId,
-            turnOrderPosition: gameState.turnOrder?.indexOf(p.id) ?? 99,
-          }))}
-          winScore={gameState.settings.winScore}
-          currentRound={gameState.currentRound}
-        />
+        <Scoreboard {...scoreboardProps} />
       </div>
 
       {/* Card Table with all players */}
       <div className="flex-1 flex items-start justify-center pt-2">
-        <CardTable
-          players={allPlayersInTurnOrder.map((p, index) => ({
-            id: p.id,
-            name: p.name,
-            orderId: index,
-            handCount: p.handCount || 0,
-            currentRank: p.currentRank,
-            isFinished: p.isFinished,
-            isCurrentTurn: p.id === gameState.currentPlayerId,
-            isMe: p.odlerId === session?.user?.id,
-          }))}
-          lastPlay={gameState.lastPlay}
-          lastAction={gameState.lastAction}
-        />
+        <CardTable {...cardTableProps} />
       </div>
 
       <div className={`mt-auto transition-all duration-300 ${isMyTurn ? 'pb-2' : ''}`}>
@@ -575,64 +759,7 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         )}
       </div>
 
-      {gameState.status === 'ROUND_END' && (
-        <RoundResults
-          results={gameState.finishOrder.map((playerId, index) => {
-            const player = gameState.players.find((p) => p.id === playerId)!
-            // Points based on player count: 4 players = [4,3,2,0], 5 = [5,4,3,2,0], 6 = [6,5,4,3,2,0]
-            const pointsMap: Record<number, number[]> = {
-              4: [4, 3, 2, 0],
-              5: [5, 4, 3, 2, 0],
-              6: [6, 5, 4, 3, 2, 0],
-            }
-            const points = (pointsMap[gameState.settings.playerCount] || [4, 3, 2, 0])[index]
-            return {
-              playerId,
-              name: player.name,
-              position: index,
-              points,
-              totalScore: player.totalScore,
-              rank: player.currentRank || 'PEASANT',
-            }
-          })}
-          isHost={session?.user?.id === gameState.players[0]?.odlerId}
-          onNextRound={handleNextRound}
-        />
-      )}
-
-      {gameState.status === 'TRADING' && gameState.tradingState && (
-        <TradingPhase
-          tradingState={gameState.tradingState}
-          myPlayerId={myPlayer?.id || ''}
-          myHand={hand}
-          players={gameState.players.map((p) => ({ id: p.id, name: p.name }))}
-          twosHigh={gameState.settings.twosHigh}
-          onTrade={handleTrade}
-          loading={actionLoading}
-        />
-      )}
-
-      {gameState.status === 'GAME_OVER' && (
-        <GameOver
-          winner={{
-            name: gameState.players.reduce((a, b) => (a.totalScore > b.totalScore ? a : b)).name,
-            score: Math.max(...gameState.players.map((p) => p.totalScore)),
-          }}
-          finalScores={gameState.players.map((p) => ({
-            playerId: p.id,
-            name: p.name,
-            score: p.totalScore,
-          }))}
-          onExit={() => router.push('/')}
-        />
-      )}
-
-      {/* Chat */}
-      <Chat
-        messages={gameState.messages || []}
-        onSendMessage={handleSendMessage}
-        currentPlayerId={myPlayer?.id || ''}
-      />
+      {sharedOverlays}
     </div>
   )
 }

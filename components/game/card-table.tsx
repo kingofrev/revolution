@@ -27,6 +27,7 @@ interface CardTableProps {
     description: string
     autoSkipped: { playerId: string; playerName: string; playerRank: string | null }[]
   } | null
+  compact?: boolean
 }
 
 const rankEmojis: Record<string, string> = {
@@ -80,14 +81,17 @@ function FaceDownCards({
   count,
   position,
   isCurrentTurn,
-  isMe = false
+  isMe = false,
+  compact = false,
 }: {
   count: number
   position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
   isCurrentTurn: boolean
   isMe?: boolean
+  compact?: boolean
 }) {
-  const cards = Array.from({ length: Math.min(count, 13) })
+  const maxCards = compact ? 5 : 13
+  const cards = Array.from({ length: Math.min(count, maxCards) })
 
   // Rotation based on position (cards face toward center)
   const rotations: Record<string, string> = {
@@ -105,7 +109,7 @@ function FaceDownCards({
   const isVertical = position === 'left' || position === 'right'
 
   if (count === 0) {
-    return <div className="text-slate-500 text-sm">Finished</div>
+    return <div className="text-slate-500 text-xs">Finished</div>
   }
 
   return (
@@ -118,7 +122,8 @@ function FaceDownCards({
         <div
           key={index}
           className={cn(
-            'w-8 h-11 rounded-md border',
+            'rounded-md border',
+            compact ? 'w-5 h-7' : 'w-8 h-11',
             'bg-gradient-to-br from-indigo-800 via-blue-700 to-indigo-900',
             'shadow-md',
             rotations[position],
@@ -127,8 +132,8 @@ function FaceDownCards({
             !isMe && !isCurrentTurn && 'border-slate-400/50'
           )}
           style={{
-            marginLeft: !isVertical && index > 0 ? '-20px' : 0,
-            marginTop: isVertical && index > 0 ? '-28px' : 0,
+            marginLeft: !isVertical && index > 0 ? (compact ? '-12px' : '-20px') : 0,
+            marginTop: isVertical && index > 0 ? (compact ? '-18px' : '-28px') : 0,
             zIndex: index,
           }}
         />
@@ -140,32 +145,39 @@ function FaceDownCards({
 // Player name plate
 function PlayerPlate({
   player,
-  position
+  position,
+  compact = false,
 }: {
   player: Player
   position: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+  compact?: boolean
 }) {
   const rankGradient = player.currentRank ? rankColors[player.currentRank] : 'from-slate-600 to-slate-800'
 
   return (
     <div className={cn(
-      'flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r shadow-lg',
+      'flex items-center gap-1.5 rounded-full bg-gradient-to-r shadow-lg',
+      compact ? 'px-2 py-1' : 'px-3 py-1.5',
       rankGradient,
       player.isCurrentTurn && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-emerald-900',
       player.isMe && !player.isCurrentTurn && 'ring-1 ring-emerald-400/50'
     )}>
       {player.currentRank && (
-        <span className="text-sm">{rankEmojis[player.currentRank]}</span>
+        <span className={compact ? 'text-xs' : 'text-sm'}>{rankEmojis[player.currentRank]}</span>
       )}
       <span className={cn(
-        'text-sm font-medium text-white',
+        'font-medium text-white',
+        compact ? 'text-xs' : 'text-sm',
         player.isCurrentTurn && 'text-yellow-200',
         player.isMe && '!text-emerald-300'
       )}>
         {player.name}{player.isMe && ' (You)'}
       </span>
       {!player.isFinished && (
-        <span className="text-xs bg-black/30 px-1.5 py-0.5 rounded text-white/80">
+        <span className={cn(
+          'bg-black/30 px-1.5 py-0.5 rounded text-white/80',
+          compact ? 'text-xs' : 'text-xs'
+        )}>
           {player.handCount}
         </span>
       )}
@@ -173,7 +185,7 @@ function PlayerPlate({
   )
 }
 
-export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
+export function CardTable({ players, lastPlay, lastAction, compact = false }: CardTableProps) {
   // Get fixed positions for all players based on player count
   // Always clockwise from top: top → top-right → right/bottom-right → bottom/bottom-left → left/top-left
   const getPositions = (count: number): string[] => {
@@ -189,7 +201,16 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
   const positions = getPositions(players.length)
 
   // Position styles for each spot around the table
-  const positionStyles: Record<string, string> = {
+  const positionStyles: Record<string, string> = compact ? {
+    'top': 'top-2 left-1/2 -translate-x-1/2 flex-col',
+    'top-left': 'top-6 left-6 flex-col items-start',
+    'top-right': 'top-6 right-6 flex-col items-end',
+    'right': 'right-2 top-1/2 -translate-y-1/2 flex-row-reverse items-center',
+    'left': 'left-2 top-1/2 -translate-y-1/2 flex-row items-center',
+    'bottom': 'bottom-2 left-1/2 -translate-x-1/2 flex-col-reverse',
+    'bottom-left': 'bottom-6 left-6 flex-col-reverse items-start',
+    'bottom-right': 'bottom-6 right-6 flex-col-reverse items-end',
+  } : {
     'top': 'top-4 left-1/2 -translate-x-1/2 flex-col',
     'top-left': 'top-12 left-12 flex-col items-start',
     'top-right': 'top-12 right-12 flex-col items-end',
@@ -201,20 +222,32 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
   }
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto aspect-[16/10]">
+    <div className={cn(
+      'relative w-full mx-auto',
+      compact ? 'aspect-[4/3] max-w-full' : 'max-w-4xl aspect-[16/10]'
+    )}>
       {/* Table surface */}
       <div className="absolute inset-0">
         {/* Outer wooden rail */}
         <div className="absolute inset-0 rounded-full bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950 shadow-2xl" />
 
         {/* Inner wooden edge */}
-        <div className="absolute inset-3 rounded-full bg-gradient-to-b from-amber-600 via-amber-700 to-amber-900" />
+        <div className={cn(
+          'absolute rounded-full bg-gradient-to-b from-amber-600 via-amber-700 to-amber-900',
+          compact ? 'inset-2' : 'inset-3'
+        )} />
 
         {/* Padding/cushion rail */}
-        <div className="absolute inset-5 rounded-full bg-gradient-to-b from-amber-900 to-amber-950" />
+        <div className={cn(
+          'absolute rounded-full bg-gradient-to-b from-amber-900 to-amber-950',
+          compact ? 'inset-3' : 'inset-5'
+        )} />
 
         {/* Green felt surface */}
-        <div className="absolute inset-7 rounded-full bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 shadow-inner overflow-hidden">
+        <div className={cn(
+          'absolute rounded-full bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 shadow-inner overflow-hidden',
+          compact ? 'inset-4' : 'inset-7'
+        )}>
           {/* Felt texture */}
           <div
             className="absolute inset-0 opacity-20"
@@ -235,16 +268,17 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
           <div
             key={player.id}
             className={cn(
-              'absolute flex gap-2 z-10',
+              'absolute flex gap-1.5 z-10',
               positionStyles[position]
             )}
           >
-            <PlayerPlate player={player} position={position as any} />
+            <PlayerPlate player={player} position={position as any} compact={compact} />
             <FaceDownCards
               count={player.handCount}
               position={position as any}
               isCurrentTurn={player.isCurrentTurn}
               isMe={player.isMe}
+              compact={compact}
             />
           </div>
         )
@@ -255,8 +289,8 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
         {/* Action caption */}
         {lastAction && (
           <div className="mb-2 text-center">
-            <div className="bg-black/40 backdrop-blur-sm rounded-lg px-4 py-2 inline-block">
-              <span className="text-white text-sm">
+            <div className="bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 inline-block">
+              <span className={cn('text-white', compact ? 'text-xs' : 'text-sm')}>
                 {lastAction.playerRank && (
                   <span className="text-yellow-400">
                     {rankEmojis[lastAction.playerRank]}{' '}
@@ -285,9 +319,12 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
 
         {/* Cards in play */}
         {lastPlay ? (
-          <div className="flex flex-col items-center gap-2">
-            <CardStack cards={lastPlay.cards} size="md" />
-            <div className="text-sm font-medium text-emerald-100 bg-black/30 px-3 py-1 rounded-full">
+          <div className="flex flex-col items-center gap-1.5">
+            <CardStack cards={lastPlay.cards} size={compact ? 'sm' : 'md'} />
+            <div className={cn(
+              'font-medium text-emerald-100 bg-black/30 px-2 py-0.5 rounded-full',
+              compact ? 'text-xs' : 'text-sm'
+            )}>
               {(() => {
                 const playedBy = players.find(p => p.id === lastPlay.playerId)
                 const playerName = playedBy?.name || 'Unknown'
@@ -298,7 +335,7 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
           </div>
         ) : (
           <div className="text-emerald-200/50 text-center">
-            <div className="text-lg font-medium">Lead any cards</div>
+            <div className={cn('font-medium', compact ? 'text-sm' : 'text-lg')}>Lead any cards</div>
           </div>
         )}
       </div>
