@@ -166,24 +166,32 @@ export function ActionButtons({
 
 interface BurnedCardsProps {
   cards: Card[]
-  currentRound: number
+  onAcknowledge: () => void
 }
 
-export function BurnedCards({ cards, currentRound }: BurnedCardsProps) {
-  if (!cards || cards.length === 0 || currentRound > 1) {
+export function BurnedCards({ cards, onAcknowledge }: BurnedCardsProps) {
+  if (!cards || cards.length === 0) {
     return null
   }
 
   return (
-    <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-slate-800/95 rounded-xl p-4 z-40 border border-amber-500/50">
-      <div className="text-amber-400 text-sm font-medium text-center mb-2">
-        Burned Cards (Round 1)
-      </div>
-      <div className="flex gap-2 justify-center">
-        <CardStack cards={cards} />
-      </div>
-      <div className="text-slate-400 text-xs text-center mt-2">
-        These cards are out of play this round
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-slate-800 rounded-xl p-6 border border-amber-500/50 max-w-sm w-full mx-4 text-center">
+        <div className="text-amber-400 text-base font-semibold mb-1">
+          Burned Cards
+        </div>
+        <div className="text-slate-400 text-xs mb-4">
+          These {cards.length} card{cards.length !== 1 ? 's are' : ' is'} out of play this round
+        </div>
+        <div className="flex justify-center mb-5">
+          <CardStack cards={cards} />
+        </div>
+        <button
+          onClick={onAcknowledge}
+          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+        >
+          Got it
+        </button>
       </div>
     </div>
   )

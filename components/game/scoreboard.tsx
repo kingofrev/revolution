@@ -9,6 +9,7 @@ interface PlayerScore {
   rank: string | null
   isFinished: boolean
   isCurrentTurn: boolean
+  turnOrderPosition: number
 }
 
 interface ScoreboardProps {
@@ -33,13 +34,13 @@ const rankOrder: Record<string, number> = {
 }
 
 export function Scoreboard({ players, winScore, currentRound }: ScoreboardProps) {
-  // Sort by rank (King first), then by score for players with same rank
+  // Sort by rank (King first), then by turn order position for same-rank players
   const sortedPlayers = [...players].sort((a, b) => {
     const rankA = a.rank ? rankOrder[a.rank] ?? 99 : 99
     const rankB = b.rank ? rankOrder[b.rank] ?? 99 : 99
     if (rankA !== rankB) return rankA - rankB
-    // Same rank or no rank - sort by score
-    return b.score - a.score
+    // Same rank - use turn order position (preserves High/Low Peasant distinction)
+    return a.turnOrderPosition - b.turnOrderPosition
   })
 
   return (

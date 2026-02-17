@@ -63,6 +63,7 @@ interface GameState {
   messages?: ChatMessage[]
   tradingState?: TradingState | null
   burnedCards?: Card[]
+  pendingBurnedCardsAck?: string[]
   lastAction?: LastAction | null
 }
 
@@ -226,6 +227,23 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
       }
     } catch (err) {
       // Silently fail for chat messages
+    }
+  }
+
+  async function handleAcknowledgeBurnedCards() {
+    try {
+      const res = await fetch(`/api/games/${resolvedParams.code}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'acknowledge-burned-cards' }),
+      })
+
+      if (res.ok) {
+        const { state } = await res.json()
+        setGameState(state)
+      }
+    } catch (err) {
+      // Silently fail
     }
   }
 
@@ -454,8 +472,9 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
         </div>
       )}
 
-      {gameState.burnedCards && gameState.burnedCards.length > 0 && (
-        <BurnedCards cards={gameState.burnedCards} currentRound={gameState.currentRound} />
+      {gameState.burnedCards && gameState.burnedCards.length > 0 &&
+        gameState.pendingBurnedCardsAck?.includes(session?.user?.id ?? '') && (
+        <BurnedCards cards={gameState.burnedCards} onAcknowledge={handleAcknowledgeBurnedCards} />
       )}
 
       <div className="flex justify-between items-start mb-4">
@@ -479,6 +498,7 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             rank: p.currentRank,
             isFinished: p.isFinished,
             isCurrentTurn: p.id === gameState.currentPlayerId,
+            turnOrderPosition: gameState.turnOrder?.indexOf(p.id) ?? 99,
           }))}
           winScore={gameState.settings.winScore}
           currentRound={gameState.currentRound}

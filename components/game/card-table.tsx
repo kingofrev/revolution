@@ -205,16 +205,16 @@ export function CardTable({ players, lastPlay, lastAction }: CardTableProps) {
       {/* Table surface */}
       <div className="absolute inset-0">
         {/* Outer wooden rail */}
-        <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950 shadow-2xl" />
+        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-amber-700 via-amber-800 to-amber-950 shadow-2xl" />
 
         {/* Inner wooden edge */}
-        <div className="absolute inset-3 rounded-[2.5rem] bg-gradient-to-b from-amber-600 via-amber-700 to-amber-900" />
+        <div className="absolute inset-3 rounded-full bg-gradient-to-b from-amber-600 via-amber-700 to-amber-900" />
 
         {/* Padding/cushion rail */}
-        <div className="absolute inset-5 rounded-[2rem] bg-gradient-to-b from-amber-900 to-amber-950" />
+        <div className="absolute inset-5 rounded-full bg-gradient-to-b from-amber-900 to-amber-950" />
 
         {/* Green felt surface */}
-        <div className="absolute inset-7 rounded-[1.5rem] bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 shadow-inner overflow-hidden">
+        <div className="absolute inset-7 rounded-full bg-gradient-to-br from-emerald-600 via-emerald-700 to-emerald-800 shadow-inner overflow-hidden">
           {/* Felt texture */}
           <div
             className="absolute inset-0 opacity-20"

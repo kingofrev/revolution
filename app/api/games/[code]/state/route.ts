@@ -77,10 +77,14 @@ async function executeBotTurn(state: any, code: string): Promise<any> {
     state.passCount++
     const activePlayers = state.players.filter((p: any) => !p.isFinished)
 
-    if (state.passCount >= activePlayers.length - 1) {
+    // If pile owner has finished, ALL remaining active players must pass
+    // If pile owner is still active, all OTHER players must pass (activePlayers - 1)
+    const lastPlayerId = state.lastPlay.playerId
+    const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
+    const passThreshold = lastPlayer?.isFinished ? activePlayers.length : activePlayers.length - 1
+
+    if (state.passCount >= passThreshold) {
       // Everyone passed, clear the pile
-      const lastPlayerId = state.lastPlay.playerId
-      const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
       state.lastPlay = null
       state.passCount = 0
 
@@ -305,73 +309,17 @@ export async function GET(
       return NextResponse.json({ status: 'LOBBY' })
     }
 
-    // Get or initialize game state
     let currentState = state
-
-    if (!currentState && game.status === 'PLAYING') {
-      // Initialize game state with dealt cards
-      const deck = shuffleDeck(createDeck())
-      // Round 1: burn extra cards (no recipients)
-      const { hands, burnedCards } = dealCardsWithExtras(deck, game.players.length, [])
-
-      const players = game.players.map((p, index) => ({
-        id: p.id,
-        odlerId: p.userId,
-        name: p.user.name,
-        isBot: p.user.isBot || false,
-        seatPosition: p.seatPosition,
-        hand: sortHand(hands[index], game.twosHigh),
-        totalScore: p.totalScore,
-        currentRank: p.currentRank,
-        isFinished: false,
-        finishPosition: null,
-      }))
-
-      // Find player with 3 of clubs to start
-      const startingPlayer = players.find(p =>
-        p.hand.some(c => c.id === '3-clubs')
-      ) || players[0]
-
-      // For round 1, turn order is based on seat position
-      const turnOrder = players.map(p => p.id)
-
-      currentState = {
-        gameId: game.id,
-        code: upperCode,
-        status: 'PLAYING',
-        settings: {
-          playerCount: game.playerCount,
-          twosHigh: game.twosHigh,
-          tradingEnabled: game.tradingEnabled,
-          winScore: game.winScore,
-        },
-        currentRound: game.currentRound,
-        players,
-        currentPlayerId: startingPlayer.id,
-        lastPlay: null,
-        passCount: 0,
-        finishOrder: [],
-        turnOrder,
-        tradingState: null,
-        messages: [],
-        burnedCards, // Show burned cards for round 1 (5 or 6 players)
-      }
-
-      // If starting player is a bot, set timestamp for delay
-      if (startingPlayer?.isBot) {
-        currentState.botTurnStartTime = Date.now()
-      }
-
-      // Save to database
-      await saveGameState(upperCode, currentState)
-    }
 
     if (!currentState) {
       return NextResponse.json({ error: 'Game state not found' }, { status: 404 })
     }
 
+    // Skip bot turns while any human player hasn't acknowledged burned cards yet
+    const hasPendingAck = currentState.pendingBurnedCardsAck?.length > 0
+
     // Bot auto-play: If it's a bot's turn, make them play (after 3 second delay)
-    if (currentState.status === 'PLAYING' && currentState.currentPlayerId) {
+    if (!hasPendingAck && currentState.status === 'PLAYING' && currentState.currentPlayerId) {
       const currentPlayer = currentState.players.find((p: any) => p.id === currentState.currentPlayerId)
       if (currentPlayer?.isBot && !currentPlayer.isFinished) {
         // Check if bot turn just started (no timestamp yet)
@@ -390,7 +338,7 @@ export async function GET(
     }
 
     // Bot auto-trade: If in trading phase and a bot needs to trade (after 3 second delay)
-    if (currentState.status === 'TRADING' && currentState.tradingState) {
+    if (!hasPendingAck && currentState.status === 'TRADING' && currentState.tradingState) {
       // Check if any bot needs to trade
       const { kingId, queenId, kingTraded, queenTraded } = currentState.tradingState
       const king = currentState.players.find((p: any) => p.id === kingId)
@@ -459,8 +407,8 @@ export async function POST(
       return NextResponse.json({ error: 'Not in game' }, { status: 403 })
     }
 
-    // Check turn only for play/pass actions, not for next-round, chat, or trade
-    if (action !== 'next-round' && action !== 'chat' && action !== 'trade' && myPlayer.id !== state.currentPlayerId) {
+    // Check turn only for play/pass actions, not for next-round, chat, trade, or acknowledge-burned-cards
+    if (action !== 'next-round' && action !== 'chat' && action !== 'trade' && action !== 'acknowledge-burned-cards' && myPlayer.id !== state.currentPlayerId) {
       return NextResponse.json({ error: 'Not your turn' }, { status: 400 })
     }
 
@@ -777,10 +725,14 @@ export async function POST(
       state.passCount++
       const activePlayers = state.players.filter((p: any) => !p.isFinished)
 
-      if (state.passCount >= activePlayers.length - 1) {
+      // If pile owner has finished, ALL remaining active players must pass
+      // If pile owner is still active, all OTHER players must pass (activePlayers - 1)
+      const lastPlayerId = state.lastPlay.playerId
+      const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
+      const passThreshold = lastPlayer?.isFinished ? activePlayers.length : activePlayers.length - 1
+
+      if (state.passCount >= passThreshold) {
         // Everyone passed, clear the pile
-        const lastPlayerId = state.lastPlay.playerId
-        const lastPlayer = state.players.find((p: any) => p.id === lastPlayerId)
         state.lastPlay = null
         state.passCount = 0
 
@@ -826,6 +778,17 @@ export async function POST(
       // Keep only last 50 messages
       if (state.messages.length > 50) {
         state.messages = state.messages.slice(-50)
+      }
+
+      await saveGameState(upperCode, state)
+      return NextResponse.json({ success: true, state: maskState(state, session.user.id) })
+
+    } else if (action === 'acknowledge-burned-cards') {
+      // Remove this user from the pending acknowledgement list
+      if (state.pendingBurnedCardsAck && Array.isArray(state.pendingBurnedCardsAck)) {
+        state.pendingBurnedCardsAck = state.pendingBurnedCardsAck.filter(
+          (id: string) => id !== session.user.id
+        )
       }
 
       await saveGameState(upperCode, state)
