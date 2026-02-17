@@ -224,7 +224,7 @@ export function CardTable({ players, lastPlay, lastAction, compact = false }: Ca
   return (
     <div className={cn(
       'relative w-full mx-auto',
-      compact ? 'aspect-[4/3] max-w-full' : 'max-w-4xl aspect-[16/10]'
+      compact ? 'aspect-[3/4] max-w-full' : 'max-w-4xl aspect-[16/10]'
     )}>
       {/* Table surface */}
       <div className="absolute inset-0">
