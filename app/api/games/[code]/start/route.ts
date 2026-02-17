@@ -109,7 +109,7 @@ export async function POST(
       data: {
         status: 'PLAYING',
         currentRound: 1,
-        gameState: initialState,
+        gameState: initialState as any,
       },
     })
 
