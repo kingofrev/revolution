@@ -433,9 +433,11 @@ export function getBotTradeCards(
   count: number,
   twosHigh: boolean
 ): Card[] {
-  // Give away the worst cards (lowest value)
-  const sorted = [...hand].sort((a, b) =>
-    getCardValue(a.rank, twosHigh) - getCardValue(b.rank, twosHigh)
-  )
+  // Give away the worst cards (lowest rank + lowest suit for tie-break)
+  const sorted = [...hand].sort((a, b) => {
+    const aFull = getCardValue(a.rank, twosHigh) * 10 + SUIT_VALUES[a.suit]
+    const bFull = getCardValue(b.rank, twosHigh) * 10 + SUIT_VALUES[b.suit]
+    return aFull - bFull
+  })
   return sorted.slice(0, count)
 }

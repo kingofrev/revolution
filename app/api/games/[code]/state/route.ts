@@ -95,6 +95,12 @@ async function executeBotTurn(state: any, code: string): Promise<any> {
       }
     } else {
       state.currentPlayerId = getNextPlayer(state.players, currentPlayer.id, state.turnOrder)
+      // If we've looped back to the player who made the last play, everyone else has passed
+      // (can happen when some players were auto-skipped due to insufficient card count)
+      if (state.currentPlayerId === lastPlayerId && lastPlayer && !lastPlayer.isFinished) {
+        state.lastPlay = null
+        state.passCount = 0
+      }
     }
   } else {
     // Bot plays cards
@@ -329,7 +335,7 @@ export async function GET(
         } else {
           // Check if 3 seconds have passed
           const elapsed = Date.now() - currentState.botTurnStartTime
-          if (elapsed >= 3000) {
+          if (elapsed >= 2000) {
             currentState.botTurnStartTime = null
             currentState = await executeBotTurn(currentState, upperCode)
           }
@@ -353,7 +359,7 @@ export async function GET(
         } else {
           // Check if 3 seconds have passed
           const elapsed = Date.now() - currentState.botTurnStartTime
-          if (elapsed >= 3000) {
+          if (elapsed >= 2000) {
             currentState.botTurnStartTime = null
             currentState = await executeBotTrades(currentState, upperCode)
           }
@@ -745,6 +751,12 @@ export async function POST(
         }
       } else {
         state.currentPlayerId = getNextPlayer(state.players, myPlayer.id, state.turnOrder)
+        // If we've looped back to the player who made the last play, everyone else has passed
+        // (can happen when some players were auto-skipped due to insufficient card count)
+        if (state.currentPlayerId === lastPlayerId && lastPlayer && !lastPlayer.isFinished) {
+          state.lastPlay = null
+          state.passCount = 0
+        }
       }
 
       // If next player is a bot, set timestamp for delay

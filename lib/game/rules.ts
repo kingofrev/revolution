@@ -1,4 +1,4 @@
-import { Card, getCardValue, isValidRun, getRunHighCard, getHighestSuitInSet, SUIT_VALUES, isValidBomb, getBombHighRank } from './deck'
+import { Card, getCardValue, getFullCardValue, isValidRun, getRunHighCard, getHighestSuitInSet, SUIT_VALUES, isValidBomb, getBombHighRank } from './deck'
 
 export type PlayType = 'single' | 'pair' | 'triple' | 'quad' | 'run' | 'bomb'
 
@@ -223,14 +223,14 @@ export function getTradingPairs(
 
 export function getBestCards(hand: Card[], count: number, twosHigh: boolean): Card[] {
   const sorted = [...hand].sort((a, b) => {
-    return getCardValue(b.rank, twosHigh) - getCardValue(a.rank, twosHigh)
+    return getFullCardValue(b, twosHigh) - getFullCardValue(a, twosHigh)
   })
   return sorted.slice(0, count)
 }
 
 export function getWorstCards(hand: Card[], count: number, twosHigh: boolean): Card[] {
   const sorted = [...hand].sort((a, b) => {
-    return getCardValue(a.rank, twosHigh) - getCardValue(b.rank, twosHigh)
+    return getFullCardValue(a, twosHigh) - getFullCardValue(b, twosHigh)
   })
   return sorted.slice(0, count)
 }
