@@ -35,8 +35,8 @@ interface PossiblePlay {
 
 // Bot names for personality
 export const BOT_NAMES = [
-  'CardShark', 'AceBot', 'RoyalFlush', 'DeckMaster',
-  'CardWizard', 'PokerFace', 'WildCard', 'JackpotJoe'
+  'Hamlet', 'Iago', 'Falstaff', 'Prospero',
+  'Macbeth', 'Oberon', 'Portia', 'Caliban'
 ]
 
 export function getBotName(index: number): string {
