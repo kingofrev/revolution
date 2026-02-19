@@ -299,6 +299,28 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
     }
   }
 
+  async function handleHandoffToBot() {
+    if (!confirm('A bot will take over your hand and finish the game for you. Continue?')) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/games/${resolvedParams.code}/handoff`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || 'Failed to hand off to bot')
+        return
+      }
+
+      router.push('/')
+    } catch (err) {
+      setError('Failed to hand off to bot')
+    }
+  }
+
   if (authStatus === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-900">
@@ -583,6 +605,12 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             >
               Leave
             </button>
+            <button
+              onClick={handleHandoffToBot}
+              className="text-xs text-yellow-400 hover:text-yellow-300"
+            >
+              Let bot finish
+            </button>
           </div>
           <button
             onClick={() => setShowScores(true)}
@@ -703,6 +731,12 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             className="text-xs text-red-400 hover:text-red-300 hover:underline"
           >
             Leave Game
+          </button>
+          <button
+            onClick={handleHandoffToBot}
+            className="text-xs text-yellow-400 hover:text-yellow-300 hover:underline"
+          >
+            Let bot finish
           </button>
         </div>
         <Scoreboard {...scoreboardProps} />
