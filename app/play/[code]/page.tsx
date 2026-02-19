@@ -66,6 +66,7 @@ interface GameState {
   burnedCards?: Card[]
   pendingBurnedCardsAck?: string[]
   lastAction?: LastAction | null
+  mustPlayCardId?: string | null
 }
 
 export default function PlayPage({ params }: { params: Promise<{ code: string }> }) {
@@ -610,6 +611,11 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
                 ★ Your turn! ★
               </span>
             )}
+            {isMyTurn && gameState.mustPlayCardId && !gameState.lastPlay && (
+              <div className="mt-1 text-orange-300 text-xs font-medium">
+                You must include your lowest card in this play
+              </div>
+            )}
           </div>
 
           {!myPlayer?.isFinished && (
@@ -719,6 +725,11 @@ export default function PlayPage({ params }: { params: Promise<{ code: string }>
             <span className="ml-2 text-yellow-400 animate-pulse font-bold">
               ★ Your turn! ★
             </span>
+          )}
+          {isMyTurn && gameState.mustPlayCardId && !gameState.lastPlay && (
+            <div className="mt-1 text-orange-300 text-sm font-medium">
+              You must include your lowest card in this play
+            </div>
           )}
         </div>
 

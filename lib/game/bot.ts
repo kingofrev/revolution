@@ -219,6 +219,9 @@ function findAllBombs(hand: Card[], twosHigh: boolean): Card[][] {
 
 /**
  * Select the best play when leading
+ *
+ * Strategy: dump isolated junk first, save combos (pairs/runs/triples/quads) for later.
+ * When an opponent is dangerous, switch to aggressive mode to maintain control.
  */
 function selectLeadPlay(
   hand: Card[],
@@ -233,51 +236,64 @@ function selectLeadPlay(
     return planExitPlay(hand, analysis, twosHigh)
   }
 
-  // Strategy: Lead from positions of strength to maintain control
-
-  // If we have quads, consider leading with them (very strong)
-  if (quads.length > 0 && !opponentDangerous) {
-    // Lead with lowest quad to save higher ones
-    return quads[0]
+  // Count how many of each rank we have (for detecting isolated singles)
+  const rankCounts: Record<string, number> = {}
+  for (const card of hand) {
+    rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1
   }
 
-  // If we have multiple triples, lead with the lowest
-  if (triples.length >= 2) {
-    return triples[0]
+  // Identify which ranks are part of a run
+  const runRanks = new Set<string>()
+  for (const run of runs) {
+    for (const card of run) runRanks.add(card.rank)
   }
 
-  // If we have multiple pairs, lead with pairs (harder to beat)
-  if (pairs.length >= 2) {
-    // Lead with lowest pair that doesn't break a triple
-    for (const pair of pairs) {
-      const rank = pair[0].rank
-      const fullGroup = hand.filter(c => c.rank === rank)
-      if (fullGroup.length === 2) {
-        return pair  // This pair doesn't break anything
-      }
-    }
-    return pairs[0]  // Default to lowest pair
+  // AGGRESSIVE MODE: opponent is about to win — play best combos to maintain control
+  if (opponentDangerous) {
+    if (quads.length > 0) return quads[quads.length - 1]   // Highest quad
+    if (triples.length > 0) return triples[triples.length - 1]  // Highest triple
+    if (runs.length > 0) return runs[runs.length - 1]       // Highest run
+    if (pairs.length > 0) return pairs[pairs.length - 1]    // Highest pair
+    return singles[singles.length - 1] || [hand[hand.length - 1]]  // Highest single
   }
 
-  // If we have runs, consider leading with them
-  if (runs.length > 0 && runs[0].length <= 4) {
-    // Lead with shorter runs, save longer ones
-    const shortRuns = runs.filter(r => r.length <= 4)
-    if (shortRuns.length > 0) {
-      return shortRuns[0]
-    }
-  }
+  // NORMAL MODE: dump junk first, save combos
 
-  // Default: lead with lowest single that isn't part of a pair/triple
+  // 1. Play lowest isolated single (not part of any pair, triple, quad, or run)
   for (const single of singles) {
     const rank = single[0].rank
-    const count = hand.filter(c => c.rank === rank).length
-    if (count === 1) {
-      return single  // True single, not breaking anything
+    if (rankCounts[rank] === 1 && !runRanks.has(rank)) {
+      return single
     }
   }
 
-  // If all cards are in groups, play lowest single anyway
+  // 2. Play lowest true pair (rank appears exactly twice, not part of a run)
+  for (const pair of pairs) {
+    const rank = pair[0].rank
+    if (rankCounts[rank] === 2 && !runRanks.has(rank)) {
+      return pair
+    }
+  }
+
+  // 3. Play shortest run (fewest cards, lowest high card)
+  if (runs.length > 0) {
+    const shortestLength = Math.min(...runs.map(r => r.length))
+    const shortestRuns = runs.filter(r => r.length === shortestLength)
+    return shortestRuns[0]
+  }
+
+  // 4. Play lowest triple that isn't part of something bigger
+  for (const triple of triples) {
+    const rank = triple[0].rank
+    if (rankCounts[rank] === 3) {
+      return triple
+    }
+  }
+
+  // 5. Play lowest quad
+  if (quads.length > 0) return quads[0]
+
+  // Fallback: play lowest single
   return singles[0] || [hand[0]]
 }
 
@@ -428,6 +444,30 @@ function planExitPlay(
  * Bot trading logic - select cards to give away
  * For King/Queen: select worst cards to give to peasants
  */
+/**
+ * Bot opening play - must include a specific card (the lowest card dealt)
+ * Tries to include it in the largest/best play possible: run > quad > triple > pair > single
+ */
+export function getBotOpeningPlay(hand: Card[], mustPlayCardId: string, twosHigh: boolean): Card[] {
+  const mustCard = hand.find(c => c.id === mustPlayCardId)
+  if (!mustCard) return [hand[0]]
+
+  // Try runs that include this card (gets rid of most cards efficiently)
+  const runs = findAllRuns(hand, twosHigh).filter(run => run.some(c => c.id === mustPlayCardId))
+  if (runs.length > 0) {
+    runs.sort((a, b) => b.length - a.length)
+    return runs[0]
+  }
+
+  // Try the largest same-rank group
+  const sameRank = hand.filter(c => c.rank === mustCard.rank)
+  if (sameRank.length >= 4) return sameRank.slice(0, 4)
+  if (sameRank.length >= 3) return sameRank.slice(0, 3)
+  if (sameRank.length >= 2) return sameRank.slice(0, 2)
+
+  return [mustCard]
+}
+
 export function getBotTradeCards(
   hand: Card[],
   count: number,

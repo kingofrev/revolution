@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createDeck, shuffleDeck, dealCards, dealCardsWithExtras, sortHand, getHighestSuitInSet, getRunHighCard, getCardValue, getBombHighRank } from '@/lib/game/deck'
 import { validatePlay, getPlayType, getBestCards, getWorstCards } from '@/lib/game/rules'
-import { getBotPlay, getBotTradeCards } from '@/lib/game/bot'
+import { getBotPlay, getBotTradeCards, getBotOpeningPlay } from '@/lib/game/bot'
 
 // Helper to load game state from database
 async function loadGameState(code: string) {
@@ -60,8 +60,10 @@ async function executeBotTurn(state: any, code: string): Promise<any> {
     isLeading,
   }
 
-  // Get bot's decision
-  const cardsToPlay = getBotPlay(botState)
+  // Get bot's decision — if this is the forced opening play, must include the required card
+  const cardsToPlay = (isLeading && state.mustPlayCardId)
+    ? getBotOpeningPlay(currentPlayer.hand, state.mustPlayCardId, twosHigh)
+    : getBotPlay(botState)
 
   if (cardsToPlay === null) {
     // Bot passes
@@ -130,6 +132,8 @@ async function executeBotTurn(state: any, code: string): Promise<any> {
       bombHighRank: playType === 'bomb' ? getBombHighRank(cardsToPlay, twosHigh) : undefined,
     }
     state.passCount = 0
+    // Clear the forced opening card requirement once the first play is made
+    if (state.mustPlayCardId) state.mustPlayCardId = null
 
     // Set last action
     state.lastAction = {
@@ -423,6 +427,16 @@ export async function POST(
         return NextResponse.json({ error: 'No cards selected' }, { status: 400 })
       }
 
+      // Enforce opening play rule: starting player must include the required card
+      if (state.mustPlayCardId && !state.lastPlay) {
+        const includesRequired = cards.some((c: any) => c.id === state.mustPlayCardId)
+        if (!includesRequired) {
+          const requiredCard = myPlayer.hand.find((c: any) => c.id === state.mustPlayCardId)
+          const cardName = requiredCard ? `${requiredCard.rank} of ${requiredCard.suit}` : 'the required card'
+          return NextResponse.json({ error: `You must include the ${cardName} in your opening play` }, { status: 400 })
+        }
+      }
+
       // Use the new validation that supports runs and suit rankings
       const validation = validatePlay(cards, state.lastPlay, state.settings.twosHigh)
       if (!validation.valid) {
@@ -446,6 +460,8 @@ export async function POST(
         bombHighRank: playType === 'bomb' ? getBombHighRank(cards, state.settings.twosHigh) : undefined,
       }
       state.passCount = 0
+      // Clear the forced opening card requirement once the first play is made
+      if (state.mustPlayCardId) state.mustPlayCardId = null
 
       // Set last action message
       state.lastAction = {

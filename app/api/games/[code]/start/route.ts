@@ -62,12 +62,14 @@ export async function POST(
     // Find player with the lowest card (by rank then suit) to lead the first round
     let lowestCardValue = Infinity
     let startingPlayer = players[0]
+    let mustPlayCard: (typeof players[0]['hand'])[0] | null = null
     for (const player of players) {
       for (const card of player.hand) {
         const value = getFullCardValue(card, game.twosHigh)
         if (value < lowestCardValue) {
           lowestCardValue = value
           startingPlayer = player
+          mustPlayCard = card
         }
       }
     }
@@ -102,6 +104,8 @@ export async function POST(
       burnedCards,
       // Track which human players still need to acknowledge burned cards
       pendingBurnedCardsAck: burnedCards.length > 0 ? humanPlayerIds : [],
+      // The starting player must include this card in their opening play
+      mustPlayCardId: mustPlayCard?.id ?? null,
     }
 
     await prisma.game.update({
